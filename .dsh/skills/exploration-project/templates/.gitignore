@@ -1,0 +1,28 @@
+# ---------- Python ----------
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.uv-cache/
+
+# ---------- 数据/大文件(按需放行) ----------
+data/
+*.parquet
+
+# ---------- 输出(运营/长期跟踪产物例外入库, 见下方放行示例) ----------
+output/
+*.csv
+*.png
+
+# 例外示例: 长期运营产物入库跟踪(取消注释并按项目调整)
+# !output/daily_nav_*.csv
+# !output/monthly_funds_*.csv
+
+# ---------- 临时脚本(不入库, 见 AGENTS.md) ----------
+tmp/
+
+# ---------- OS/编辑器 ----------
+.DS_Store
+.idea/
+.vscode/

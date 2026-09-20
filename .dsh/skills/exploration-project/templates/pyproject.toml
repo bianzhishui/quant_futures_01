@@ -1,0 +1,33 @@
+[project]
+name = "exploration-project"
+version = "0.1.0"
+description = "探索型研究项目（脚手架模板初始化）"
+requires-python = ">=3.12"
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+]
+
+[tool.ruff]
+# 格式：ruff 默认风格（line-length 88, double quotes, 默认换行规则）
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+# 保持 ruff 默认的安全集(E4/E7/E9/F): 语法错误/未定义/未使用/可疑 — 不启用激进规则
+select = ["E4", "E7", "E9", "F"]
+# E402: 脚本有意在 sys.path 设置后导入模块(标准模式), 忽略
+ignore = ["E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# 让 pytest 直接 import src/ 下的包（无需安装）
+pythonpath = ["src"]
+
+# 无 [build-system]：本项目作为"虚拟项目"管理，uv sync 只安装依赖，
+# src/ 包经 pytest pythonpath 或脚本顶部 sys.path 引导导入。

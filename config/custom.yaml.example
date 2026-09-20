@@ -1,0 +1,8 @@
+# 自定义配置示例：覆盖 config/default.yaml（同 key 覆盖，缺失项继承 default）
+# 用法：
+#   python scripts/foo.py --config config/custom.yaml
+#   或环境变量 APP_CONFIG=config/custom.yaml
+# 注意：覆盖 default.yaml 中 FROZEN_PARAMS 标注的冻结 key 会触发醒目警告（见 config.py）
+
+params:
+  window: 42
