@@ -5,6 +5,7 @@
 #   2. 若指定 --config / APP_CONFIG 配置文件 → 深合并覆盖本文件（同 key 覆盖）
 #   3. 指定文件不存在 → 报错退出
 #   4. 代码不 hardcode 配置值；冻结参数偏离校验以本文件为基准（见 config.py FROZEN_PARAMS）
+# 预注册方案：docs/infrastructure_plan.md（2026-09-20 批准）
 # ============================================================
 
 # ---------- 路径（相对仓库根，加载时统一解析为绝对路径） ----------
@@ -12,10 +13,65 @@ paths:
   data: "data"                # 数据根目录
   output: "output"            # 输出（账本/CSV/图）
 
+# ---------- 数据管道（fetch/清洗/复权） ----------
+data:
+  start_date: "2018-01-01"        # 拉取起始日（回测统一窗口起点）
+  source: "akshare"               # 数据源：akshare（sina 主力连续）
+  main_dir: "futures_main_daily"  # 主连日线 parquet 子目录（相对 paths.data）
+  adjust_threshold: 0.20          # 后复权：单日 |收益| > 阈值 视为换月跳变（冻结）
+
+# ---------- 品种池（冻结；增删须预注册，见 docs/infrastructure_plan.md §3.1） ----------
+universe:
+  - {symbol: "RB0", name: "螺纹钢", sector: "黑色", exchange: "SHFE"}
+  - {symbol: "HC0", name: "热卷", sector: "黑色", exchange: "SHFE"}
+  - {symbol: "I0", name: "铁矿石", sector: "黑色", exchange: "DCE"}
+  - {symbol: "J0", name: "焦炭", sector: "黑色", exchange: "DCE"}
+  - {symbol: "JM0", name: "焦煤", sector: "黑色", exchange: "DCE"}
+  - {symbol: "CU0", name: "沪铜", sector: "有色", exchange: "SHFE"}
+  - {symbol: "AL0", name: "沪铝", sector: "有色", exchange: "SHFE"}
+  - {symbol: "ZN0", name: "沪锌", sector: "有色", exchange: "SHFE"}
+  - {symbol: "NI0", name: "沪镍", sector: "有色", exchange: "SHFE"}
+  - {symbol: "SN0", name: "沪锡", sector: "有色", exchange: "SHFE"}
+  - {symbol: "SS0", name: "不锈钢", sector: "有色", exchange: "SHFE"}
+  - {symbol: "AU0", name: "沪金", sector: "贵金属", exchange: "SHFE"}
+  - {symbol: "AG0", name: "沪银", sector: "贵金属", exchange: "SHFE"}
+  - {symbol: "SC0", name: "原油", sector: "能化", exchange: "INE"}
+  - {symbol: "FU0", name: "燃料油", sector: "能化", exchange: "SHFE"}
+  - {symbol: "BU0", name: "沥青", sector: "能化", exchange: "SHFE"}
+  - {symbol: "TA0", name: "PTA", sector: "能化", exchange: "CZCE"}
+  - {symbol: "MA0", name: "甲醇", sector: "能化", exchange: "CZCE"}
+  - {symbol: "L0", name: "塑料", sector: "能化", exchange: "DCE"}
+  - {symbol: "PP0", name: "聚丙烯", sector: "能化", exchange: "DCE"}
+  - {symbol: "EG0", name: "乙二醇", sector: "能化", exchange: "DCE"}
+  - {symbol: "RU0", name: "橡胶", sector: "能化", exchange: "SHFE"}
+  - {symbol: "M0", name: "豆粕", sector: "农产品", exchange: "DCE"}
+  - {symbol: "Y0", name: "豆油", sector: "农产品", exchange: "DCE"}
+  - {symbol: "P0", name: "棕榈油", sector: "农产品", exchange: "DCE"}
+  - {symbol: "C0", name: "玉米", sector: "农产品", exchange: "DCE"}
+  - {symbol: "OI0", name: "菜油", sector: "农产品", exchange: "CZCE"}
+  - {symbol: "RM0", name: "菜粕", sector: "农产品", exchange: "CZCE"}
+  - {symbol: "CF0", name: "棉花", sector: "农产品", exchange: "CZCE"}
+  - {symbol: "SR0", name: "白糖", sector: "农产品", exchange: "CZCE"}
+
+# ---------- 成本模型（冻结；保守统一近似，按品种精确表待预注册细化） ----------
+cost:
+  slippage_bps: 5          # 滑点 0.05% 单边
+  commission_bps: 2        # 手续费 0.02% 单边（≈ 交易所标准×2 的统一保守近似）
+  margin_ratio: 0.10       # 保证金率 10%
+
+# ---------- 回测约定（冻结） ----------
+backtest:
+  start_date: "2018-01-01" # 回测统一起点
+  vol_target: 0.15         # 组合目标年化波动
+  vol_window: 60           # 滚动年化波动窗口（日）
+  vol_min: 0.05            # 年化波动下限（截断防爆仓）
+  max_pos_ratio: 2.0       # 单品种名义持仓上限（× 权益）
+  signal_mode: "next_open" # 收盘信号 → 次日开盘成交
+
 # ---------- 实验/生产参数（冻结区，改动需预注册） ----------
 params:
-  window: 21                  # 回看窗口
-  top_ratio: 0.2              # 取头部比例
+  window: 21                  # 回看窗口（脚手架占位，待研究设计确定）
+  top_ratio: 0.2              # 取头部比例（脚手架占位，待研究设计确定）
 
 # ---------- 门槛/限制 ----------
 limits:
@@ -29,4 +85,4 @@ fetch:
 
 # ---------- 监控 ----------
 monitor:
-  baseline_start: "2020-01-01"
+  baseline_start: "2018-01-01"

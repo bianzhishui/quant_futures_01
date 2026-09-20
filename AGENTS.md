@@ -7,20 +7,26 @@
 
 ## 1. 这是什么项目
 
-期货量化研究项目（quant_futures_01）：策略探索、回测与数据研究。
-当前为脚手架初始化阶段——具体研究主题、交易品种、数据源待定；
-首个研究方案须先预注册（`docs/{topic}_plan.md`）并经用户批准后实施。
+期货量化研究项目（quant_futures_01）：**全品种商品期货**量化研究（回测探索，非实盘）。
+已批准基础设施方案（[docs/infrastructure_plan.md](docs/infrastructure_plan.md)，2026-09-20）：
+数据管道（akshare 主力连续日线 → 后复权 parquet）+ 成本模型 + 波动率目标回测引擎 + 基准 A/B。
+品种池 30 个（黑色/有色/贵金属/能化/农产品），研究起始 2018-01-01；
+具体策略主题待定，首个策略方案须先预注册并经用户批准后实施。
 
 ## 2. 环境与运行
 
 - 依赖用 **uv** 管理（pyproject.toml + uv.lock 可复现）：`uv sync` 建 `.venv`；
 - 一律 `.venv/bin/python <脚本>` 或 `uv run <tool>` 运行；
-- uv 缓存已配置在项目内（uv.toml cache-dir=.uv-cache），不依赖工作区外缓存。
+- uv 缓存已配置在项目内（uv.toml cache-dir=.uv-cache），不依赖工作区外缓存；
+- 数据源 **akshare**（拉取需联网）：先 `scripts/fetch_data.py` 落盘，再跑回测。
 
 ## 3. 核心脚本
 
 | 脚本 | 用途 |
 |---|---|
+| scripts/fetch_data.py | 拉取主力连续日线 → 清洗 → 后复权 → data/futures_main_daily/*.parquet + output/data_summary.csv |
+| scripts/backtest.py | 回测 CLI：`--weights vol\|equal\|sma20 [--sma N] [--out 名]` |
+| scripts/run_baseline.py | 基准 A（等权）/B（20 日均线）对比，复用 backtest 引擎 |
 | scripts/example.py | 示例：配置框架用法（冒烟） |
 
 ## 4. 冻结参数（改前必须预注册 + 用户批准）
@@ -29,9 +35,17 @@ config/default.yaml 中冻结参数（config.py `FROZEN_PARAMS` 标注；覆盖�
 
 | 参数 | 冻结值 | 说明 |
 |---|---|---|
-| params.window | 21 | 回看窗口（脚手架占位，待研究设计确定） |
-| params.top_ratio | 0.2 | 取头部比例（脚手架占位，待研究设计确定） |
-| limits.min_n | 50 | 最小样本数（脚手架占位，待研究设计确定） |
+| universe | 30 品种 | 品种池（增删须预注册） |
+| data.adjust_threshold | 0.20 | 后复权换月跳变阈值 |
+| cost.slippage_bps | 5 | 滑点 0.05% 单边 |
+| cost.commission_bps | 2 | 手续费 0.02% 单边（≈交易所标准×2 近似） |
+| cost.margin_ratio | 0.10 | 保证金率 |
+| backtest.start_date | 2018-01-01 | 回测起点 |
+| backtest.vol_target | 0.15 | 目标年化波动 |
+| backtest.vol_window | 60 | 滚动波动窗口（日） |
+| backtest.vol_min | 0.05 | 年化波动下限（防爆仓） |
+| backtest.max_pos_ratio | 2.0 | 单品种名义上限（×权益） |
+| params.window / top_ratio / limits.min_n | 21 / 0.2 / 50 | 脚手架占位（未用于策略，勿动） |
 
 ## 5. 研究纪律（不可省略）
 

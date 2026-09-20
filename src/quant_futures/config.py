@@ -39,6 +39,15 @@ FROZEN_PARAMS = [
     ("params", "window", "窗口"),
     ("params", "top_ratio", "头部比例"),
     ("limits", "min_n", "最小样本数"),
+    ("data", "adjust_threshold", "复权跳变阈值"),
+    ("cost", "slippage_bps", "滑点(bp)"),
+    ("cost", "commission_bps", "手续费(bp)"),
+    ("cost", "margin_ratio", "保证金率"),
+    ("backtest", "start_date", "回测起点"),
+    ("backtest", "vol_target", "目标年化波动"),
+    ("backtest", "vol_window", "波动窗口"),
+    ("backtest", "vol_min", "波动下限"),
+    ("backtest", "max_pos_ratio", "单品种名义上限"),
 ]
 
 

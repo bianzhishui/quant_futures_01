@@ -5,6 +5,9 @@ description = "期货量化研究项目（策略探索/回测/数据研究）"
 requires-python = ">=3.12"
 dependencies = [
     "pyyaml>=6.0",
+    "pandas>=2.0",
+    "pyarrow>=15",
+    "akshare>=1.14",
 ]
 
 [dependency-groups]
