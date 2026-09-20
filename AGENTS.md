@@ -35,7 +35,7 @@ config/default.yaml 中冻结参数（config.py `FROZEN_PARAMS` 标注；覆盖�
 
 | 参数 | 冻结值 | 说明 |
 |---|---|---|
-| universe | 30 品种 | 品种池（增删须预注册） |
+| universe | 30 品种 | 品种池（增删须预注册；由纪律保证，不触发 config 警告） |
 | data.adjust_threshold | 0.20 | 后复权换月跳变阈值 |
 | cost.slippage_bps | 5 | 滑点 0.05% 单边 |
 | cost.commission_bps | 2 | 手续费 0.02% 单边（≈交易所标准×2 近似） |

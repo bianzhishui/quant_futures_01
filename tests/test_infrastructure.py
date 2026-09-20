@@ -205,3 +205,48 @@ def test_sector_contribution() -> None:
     # 黑色 = A(0.5*0.01) + C(0.2*-0.01) = 0.003/日
     assert np.isclose(sec["黑色"].iloc[-1], 4 * (0.5 * 0.01 + 0.2 * -0.01))
     assert np.isclose(sec["有色"].iloc[-1], 4 * (0.3 * 0.02))
+
+
+# ---------- 前视与上市前处理（review 回归） ----------
+
+
+def test_vol_weights_no_lookahead() -> None:
+    """波动率目标权重不得用当天收益（vol[t] 仅含 returns[..t-1]）。"""
+    idx = pd.date_range("2020-01-01", periods=80, freq="B")
+    base = np.zeros(80)
+    r1 = pd.DataFrame({"A": base}, index=idx)
+    r1.loc[idx[60], "A"] = 0.0
+    r2 = r1.copy()
+    r2.loc[idx[60], "A"] = 0.30  # 当天 ±0.3 的极端收益
+    w1 = vol_target_weights(r1)
+    w2 = vol_target_weights(r2)
+    # r[60] 只允许影响 t>60 的权重；t<=60 必须逐日一致（vol[t] 不含当天收益）
+    assert np.allclose(
+        w1["A"].iloc[:61].to_numpy(), w2["A"].iloc[:61].to_numpy(), atol=1e-12
+    )
+    # 预热期（前 ~21 日无波动估计）权重应为 0
+    assert w1["A"].iloc[0] == 0.0
+
+
+def test_equal_weights_prelisting() -> None:
+    """晚上市品种在上市前权重应为 0，已上市品种按当日可交易数归一化（generate_weights）。"""
+    import sys
+    from pathlib import Path
+
+    scripts_dir = Path(__file__).resolve().parent.parent / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    from backtest import generate_weights  # 测真实脚本函数
+
+    idx = pd.date_range("2020-01-01", periods=60, freq="B")
+    closes = pd.DataFrame(index=idx, columns=["A", "B"])
+    closes["A"] = 100.0
+    closes["B"] = np.nan
+    start = 30  # B 从第 30 天起上市
+    closes.iloc[start:, 1] = 100.0
+    w = generate_weights("equal", closes, cfgmod.get_config())
+    # B 上市前: A 权重 1.0, B 权重 0；上市后各 0.5
+    assert w["B"].iloc[start - 1] == 0.0
+    assert w["A"].iloc[start - 1] == 1.0
+    assert np.isclose(w["A"].iloc[start], 0.5)
+    assert np.isclose(w["B"].iloc[start], 0.5)

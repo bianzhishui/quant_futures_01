@@ -5,7 +5,7 @@
   - 日线，自 config.data.start_date 起；
   - 停牌/无交易行删除；价格 NaN 或非正 → 报错，不静默填充；
   - 后复权：单日 |收益| > adjust_threshold 视为换月跳变，该日复权收益置 0（透明可复现）；
-  - 复权因子随数据落盘（{symbol}_adj.parquet），原始数据落盘（{symbol}.parquet）。
+  - 原始价格 + 复权列（adj_close/adj_factor/is_roll/r_adj）一并落盘 {symbol}.parquet。
 """
 
 from __future__ import annotations

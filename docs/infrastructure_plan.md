@@ -15,25 +15,32 @@
 | G2 复权正确性 | ✅ | sina 主连绝大多数换月跳变 < 阈值（20%），全池仅 NI0=1、FU0=2 个跳变日被置 0；非换月日复权收益 == 原始收益（测试 test_back_adjust_* 验证）；复权因子随数据落盘 |
 | G3 回测对拍 | ✅ | tests/test_backtest_matches_manual：手算净值 vs 引擎逐日一致（rtol 1e-9） |
 | G4 不变量 | ✅ | 基准 A/B 与 vol 回测：nav_reconstruct_max_err=0.0、yearly_compound_err≈2e-15、margin_breach=False |
-| G5 测试 | ✅ | pytest 21 全过；ruff format/check 0 错误；全部模块 import 通过 |
+| G5 测试 | ✅ | pytest 23 全过；ruff format/check 0 错误；全部模块 import 通过 |
 | G6 基准可复现 | ✅ | 基准两次运行输出逐字节一致（diff 为空） |
 
-**关键数字**（2018-01-02~2026-09-18，成本后）：
+**关键数字**（2018-01-02~2026-09-18，成本后；2026-09-20 review 修复后最终值）：
 
 | 基准/模式 | 年化收益 | 年化波动 | 夏普 | 最大回撤 | 成本拖累/年 |
 |---|---|---|---|---|---|
-| A 等权买入持有 | +6.14% | 13.4% | 0.46 | -25.1% | 0.19% |
-| B 20 日均线多空 | -4.84% | 9.6% | -0.50 | -39.3% | 4.20% |
-| 波动率目标（占位） | +4.07% | 8.1% | 0.50 | -15.0% | 0.26% |
+| A 等权买入持有 | +6.06% | 13.4% | 0.45 | -25.2% | 0.20% |
+| B 20 日均线多空 | -4.86% | 9.7% | -0.50 | -39.3% | 4.25% |
+| 波动率目标（占位） | +3.98% | 8.4% | 0.47 | -15.9% | 0.27% |
+
+**2026-09-20 review 修复记录（重要）**：
+1. **修复前视偏差**：`vol_target_weights` 原实现 vol[t] 含当天收益 r[t]（当天极端收益可改变当天权重，实测偏差最大 1.75），违反"T-1 决定、T 生效"——已改为 vol 整体 `shift(1)`（vol[t] 只用 returns[..t-1]）；补回归测试 `test_vol_weights_no_lookahead`；
+2. **修复上市前 NaN 污染**：原 `returns.fillna(0.0)` 把晚上市品种（SS0/SC0/EG0）上市前缺失收益填 0，压低滚动波动 → 上市初期权重虚高；等权基准也给未上市品种 1/N 权重制造虚假换手——已改为保留 NaN、等权/均线按**当日可交易品种数**归一化（上市前权重 0）；补回归测试 `test_equal_weights_prelisting`；
+3. 文档一致性：data.py 头注释（单文件含复权列）、AGENTS.md universe 冻结说明（由纪律保证、不触发 config 警告）；
+4. 修复后 vol 回测数字小幅回落（夏普 0.50→0.47）——前视去掉后的诚实值。
 
 **诚实局限（如实记录）**：
-1. vol 目标实际实现波动 8.1% < 目标 15%：权重用线性加权近似 + 品种间低相关分散 + max_pos_ratio 截断所致；如需更贴近目标须另预注册（协方差/缩放因子方案）；
+1. vol 目标实际实现波动 8.4% < 目标 15%：权重用线性加权近似 + 品种间低相关分散 + max_pos_ratio 截断所致；如需更贴近目标须另预注册（协方差/缩放因子方案）；
 2. sina 主连为原价拼接，换月**小跳变（<20%）未调整**，仅 >20% 跳变置 0——数据特征已在 data_summary.csv 呈现（max_abs_ret / pct_days_gt2pct）；
 3. 成本为保守统一近似（手续费 0.02% + 滑点 0.05% 单边），非按品种精确表；
-4. **基准/占位数字不代表任何策略收益**，仅为后续策略的对照基线。
+4. **基准/占位数字不代表任何策略收益**，仅为后续策略的对照基线；
+5. 品种池为"当前流动性 30 品种"的固定清单（2026 年选定），对 2018 年存在轻微事后选择偏差；未含 2018 年后才上市的新品种（如纯碱/尿素/生猪/工业硅/碳酸锂）。
 
 **产物**：data/futures_main_daily/*.parquet（30 个，gitignore）；output/data_summary.csv、output/baseline/compare.csv、output/backtest_vol_vol*.{csv,json}。
-**提交**：commit `feat: futures research infrastructure (data/cost/backtest/baseline)`（2026-09-20）。
+**提交**：`feat: futures research infrastructure (data/cost/backtest/baseline)` + `fix: remove vol-target look-ahead & pre-listing NaN pollution (review)`（2026-09-20）。
 
 ---
 

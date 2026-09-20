@@ -50,14 +50,17 @@ def load_adj_close_panel(cfg) -> pd.DataFrame:
 def generate_weights(
     mode: str, closes: pd.DataFrame, cfg, sma: int = 20
 ) -> pd.DataFrame:
-    """目标权重（T-1 收盘决定，T 日生效）。"""
-    n = closes.shape[1]
+    """目标权重（信号用 ≤T-1 数据，T 日生效；上市前品种权重 0，按当日可交易品种归一化）。"""
+    tradable = closes.notna()
+    cnt = tradable.sum(axis=1).replace(0, np.nan)  # 当日可交易品种数
     if mode == "equal":
-        return pd.DataFrame(1.0 / n, index=closes.index, columns=closes.columns)
+        w = tradable.div(cnt, axis=0).fillna(0.0)  # 等权多头（每日再平衡）
+        return w
     if mode == "sma20":
         ma = closes.rolling(sma).mean()
         sign = np.where(closes > ma, 1.0, -1.0)
-        w = pd.DataFrame(sign / n, index=closes.index, columns=closes.columns)
+        w = pd.DataFrame(sign, index=closes.index, columns=closes.columns)
+        w = w.where(tradable, 0.0).div(cnt, axis=0).fillna(0.0)
         return w.shift(1).fillna(0.0)  # T-1 决定 → T 生效
     if mode == "vol":
         returns = closes.pct_change()
@@ -70,7 +73,7 @@ def run_mode(
 ) -> tuple[dict, pd.DataFrame, dict, pd.DataFrame]:
     """跑一种权重模式，返回 (metrics, nav_df, invariants, sector_df)。"""
     closes = load_adj_close_panel(cfg)
-    returns = closes.pct_change().fillna(0.0)
+    returns = closes.pct_change()  # 保留 NaN（上市前），引擎内部处理
     target_w = generate_weights(mode, closes, cfg, sma=sma)
     res = run_backtest(returns, target_w, CostModel(cfg))
     sector_map = {u["symbol"]: u["sector"] for u in cfg.universe}

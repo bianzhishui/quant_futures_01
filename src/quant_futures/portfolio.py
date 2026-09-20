@@ -31,13 +31,21 @@ def rolling_annual_vol(returns: pd.DataFrame, window: int) -> pd.DataFrame:
 def vol_target_weights(
     returns: pd.DataFrame, cfg: cfgmod.Config | None = None
 ) -> pd.DataFrame:
-    """波动率目标权重（T-1 收盘决定，T 日生效；输入为截至 T-1 的收益序列）。"""
+    """波动率目标权重（T 日生效，波动用截至 T-1 的收益——无前视）。
+
+    规则: vol[t] = 滚动年化波动(returns[..t-1])（shift(1) 保证不含当天收益）；
+    相对权重 = 1/vol 归一化；组合波动（线性加权）→ 杠杆 = vol_target / 组合波动；
+    单品种名义上限 max_pos_ratio；波动/权重缺失（上市前/预热期）→ 0。
+    """
     c = cfg or cfgmod.get_config()
-    vol = rolling_annual_vol(returns, c.backtest.vol_window).clip(
-        lower=c.backtest.vol_min
+    # shift(1): vol[t] 只用 returns[..t-1]，权重在 t 日生效（收盘信号→次日成交）
+    vol = (
+        rolling_annual_vol(returns, c.backtest.vol_window)
+        .shift(1)
+        .clip(lower=c.backtest.vol_min)
     )
     inv = 1.0 / vol
-    w_rel = inv.div(inv.sum(axis=1), axis=0)  # 相对权重（和为 1）
+    w_rel = inv.div(inv.sum(axis=1), axis=0)  # 相对权重（和为 1；NaN 品种自然剔除）
     port_vol = (w_rel * vol).sum(axis=1)  # 组合波动近似（线性加权）
     leverage = (c.backtest.vol_target / port_vol).replace([np.inf, -np.inf], np.nan)
     w = w_rel.mul(leverage, axis=0)
@@ -66,11 +74,12 @@ def run_backtest(
     """
     idx = returns.index.intersection(target_w.index)
     r = returns.loc[idx]
+    r_safe = r.fillna(0.0)  # 上市前/停牌日：无价格 → 无贡献（权重应为 0）
     w = target_w.loc[idx].fillna(0.0)
-    gross = (w * r).sum(axis=1)
+    gross = (w * r_safe).sum(axis=1)
     prev_w = w.shift(1).fillna(0.0)
     drift_denom = (1.0 + gross).clip(lower=1e-8)
-    drifted = prev_w.mul(1.0 + r).div(drift_denom, axis=0)  # 权重随收益漂移
+    drifted = prev_w.mul(1.0 + r_safe).div(drift_denom, axis=0)  # 权重随收益漂移
     turnover = (w - drifted).abs().sum(axis=1)
     net = gross - cost.one_side_pct * turnover
     nav = (1.0 + net).cumprod()
