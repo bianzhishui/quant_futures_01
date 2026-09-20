@@ -17,8 +17,8 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from quant_futures import config as cfgmod
-from quant_futures.cost import CostModel
+from quant_futures_01 import config as cfgmod
+from quant_futures_01.cost import CostModel
 
 TRADING_DAYS = 252
 

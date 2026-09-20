@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import pandas as pd
 
-from quant_futures import config as cfgmod
+from quant_futures_01 import config as cfgmod
 from backtest import run_mode  # 复用引擎逻辑（同仓库脚本 import 调用）
 
 

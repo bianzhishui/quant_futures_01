@@ -7,7 +7,7 @@
   4. 冻结参数偏离校验：default.yaml 中 FROZEN_PARAMS 标注的 key 被覆盖 → 醒目警告（不阻止）
 
 用法：
-  from quant_futures import config
+  from quant_futures_01 import config
   cfg = config.get_config()                        # 惰性单例（默认 default.yaml）
   cfg = config.load_config("config/custom.yaml")   # 指定文件覆盖（main() 里建立）
   cfg.params.window                                # 属性访问（类型化）
@@ -203,7 +203,7 @@ def add_config_arg(parser) -> None:
 
 
 if __name__ == "__main__":
-    # 快速自检: python -m quant_futures.config [custom.yaml]
+    # 快速自检: python -m quant_futures_01.config [custom.yaml]
     c = load_config(sys.argv[1] if len(sys.argv) > 1 else None)
     print("配置加载成功:")
     print(f"  params.window = {c.params.window}")

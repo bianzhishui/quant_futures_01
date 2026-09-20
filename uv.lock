@@ -806,7 +806,7 @@ wheels = [
 ]
 
 [[package]]
-name = "quant-futures"
+name = "quant-futures-01"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

@@ -141,9 +141,9 @@
 |---|---|---|
 | M1 | config 扩展：品种池映射、成本/保证金、回测参数（标注冻结） | config/default.yaml |
 | M2 | 数据管道：akshare 拉主连日线 → 清洗 → 后复权拼接落盘 | scripts/fetch_data.py、data/futures_main_daily/ |
-| M3 | 数据加载模块（CWD 无关、缓存） | src/quant_futures/data.py |
-| M4 | 成本模型模块 | src/quant_futures/cost.py |
-| M5 | 仓位与回测引擎（波动率目标 + 不变量检查） | src/quant_futures/portfolio.py、scripts/backtest.py |
+| M3 | 数据加载模块（CWD 无关、缓存） | src/quant_futures_01/data.py |
+| M4 | 成本模型模块 | src/quant_futures_01/cost.py |
+| M5 | 仓位与回测引擎（波动率目标 + 不变量检查） | src/quant_futures_01/portfolio.py、scripts/backtest.py |
 | M6 | 基准 A/B 脚本 | scripts/run_baseline.py、output/baseline/ |
 | M7 | 测试（合成数据，不碰真实数据文件）+ 门禁逐项判定 | tests/、§0 归档 |
 | M8 | format + check + pytest + 全部 import 校验 → commit | git commit |

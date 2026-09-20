@@ -1,4 +1,4 @@
-# quant-futures
+# quant_futures_01
 
 期货量化研究项目：**全品种商品期货**的策略探索、回测与数据研究。
 基础设施方案见 [docs/infrastructure_plan.md](docs/infrastructure_plan.md)（2026-09-20 批准）。
@@ -23,7 +23,7 @@ uv run pytest                                 # 测试全过
 | 路径 | 说明 |
 |---|---|
 | config/ | 全量配置（default.yaml 权威基底；custom.yaml 覆盖） |
-| src/quant_futures/ | 框架包（config.py 配置加载 / data.py 数据管道 / cost.py 成本模型 / portfolio.py 回测引擎） |
+| src/quant_futures_01/ | 框架包（config.py 配置加载 / data.py 数据管道 / cost.py 成本模型 / portfolio.py 回测引擎） |
 | scripts/ | 可执行脚本（fetch_data / backtest / run_baseline / example） |
 | data/ | 行情数据 parquet（gitignore，不入库） |
 | tests/ | pytest 测试（不读写真实数据文件） |

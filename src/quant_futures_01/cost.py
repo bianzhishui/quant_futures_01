@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from quant_futures import config as cfgmod
+from quant_futures_01 import config as cfgmod
 
 
 class CostModel:

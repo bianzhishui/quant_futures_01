@@ -21,10 +21,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import numpy as np
 import pandas as pd
 
-from quant_futures import config as cfgmod
-from quant_futures.cost import CostModel
-from quant_futures.data import load_daily
-from quant_futures.portfolio import (
+from quant_futures_01 import config as cfgmod
+from quant_futures_01.cost import CostModel
+from quant_futures_01.data import load_daily
+from quant_futures_01.portfolio import (
     run_backtest,
     sector_contribution,
     vol_target_weights,

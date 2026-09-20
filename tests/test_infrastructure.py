@@ -9,10 +9,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from quant_futures import config as cfgmod
-from quant_futures.cost import CostModel
-from quant_futures.data import back_adjust, clean_daily
-from quant_futures.portfolio import (
+from quant_futures_01 import config as cfgmod
+from quant_futures_01.cost import CostModel
+from quant_futures_01.data import back_adjust, clean_daily
+from quant_futures_01.portfolio import (
     check_invariants,
     run_backtest,
     sector_contribution,

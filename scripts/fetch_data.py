@@ -20,8 +20,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import pandas as pd
 
-from quant_futures import config as cfgmod
-from quant_futures.data import (
+from quant_futures_01 import config as cfgmod
+from quant_futures_01.data import (
     back_adjust,
     clean_daily,
     fetch_akshare_main_daily,

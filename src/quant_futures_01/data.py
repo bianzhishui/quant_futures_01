@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from quant_futures import config as cfgmod
+from quant_futures_01 import config as cfgmod
 
 # 标准列名 → akshare/sina 可能的原始列名（英文/中文兼容）
 _COLUMN_ALIASES: dict[str, tuple[str, ...]] = {

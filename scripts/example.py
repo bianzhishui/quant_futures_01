@@ -10,7 +10,7 @@ from pathlib import Path
 # 引导：把仓库根加入 sys.path，使 src/ 下的包可直接导入（无需安装）
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from quant_futures import config
+from quant_futures_01 import config
 
 
 def main() -> None:

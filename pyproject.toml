@@ -1,5 +1,5 @@
 [project]
-name = "quant-futures"
+name = "quant_futures_01"
 version = "0.1.0"
 description = "期货量化研究项目（策略探索/回测/数据研究）"
 requires-python = ">=3.12"
