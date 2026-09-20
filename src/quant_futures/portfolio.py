@@ -72,7 +72,14 @@ def run_backtest(
 
     returns / target_w：index=日期，columns=品种；按交集对齐。
     """
+    if returns.empty or target_w.empty:
+        raise ValueError(
+            "回测输入为空（无数据）：请先运行 scripts/fetch_data.py，"
+            "或检查 config 的 start_date / limits.min_n 过滤条件"
+        )
     idx = returns.index.intersection(target_w.index)
+    if len(idx) == 0:
+        raise ValueError("回测输入日期无交集（returns 与 target_w 索引不一致）")
     r = returns.loc[idx]
     r_safe = r.fillna(0.0)  # 上市前/停牌日：无价格 → 无贡献（权重应为 0）
     w = target_w.loc[idx].fillna(0.0)

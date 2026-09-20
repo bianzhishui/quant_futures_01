@@ -56,9 +56,12 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def clean_daily(df: pd.DataFrame) -> pd.DataFrame:
-    """清洗：列归一化 → 类型转换 → 去重 → 排序 → NaN/非正检查。
+    """清洗：列归一化 → 类型转换 → 去重 → 排序 → 无交易行删除 → NaN/非正检查。
 
-    权威数据缺失要暴露：价格 NaN 或 ≤ 0 → 报错，不静默填充。
+    规则（方案 §3.2）：
+      - 停牌/无交易行（volume == 0）删除（价格停滞 ≠ 可交易，避免伪 0 收益）；
+      - 权威数据缺失要暴露：价格 NaN 或 ≤ 0 → 报错，不静默填充；
+      - 清洗后为空 → 报错（防后续复权/回测拿到空序列）。
     """
     df = _normalize_columns(df).copy()
     if "date" not in df.columns:
@@ -72,10 +75,19 @@ def clean_daily(df: pd.DataFrame) -> pd.DataFrame:
     if "hold" in df.columns:
         df["hold"] = pd.to_numeric(df["hold"], errors="coerce")
     df = df.drop_duplicates(subset=["date"]).sort_values("date").reset_index(drop=True)
+    if "volume" in df.columns:
+        n_dead = int((df["volume"] <= 0).sum())
+        df = df[df["volume"] > 0].reset_index(drop=True)
+        if n_dead and not df.empty:
+            print(
+                f"  清理 {n_dead} 个无交易行（volume=0），保留 {len(df)} 行", flush=True
+            )
     bad = df[price_cols].isna() | (df[price_cols] <= 0)
     if bad.any().any():
         n_bad = int(bad.any(axis=1).sum())
         raise ValueError(f"价格存在 NaN 或非正值（{n_bad} 行），拒绝落盘")
+    if df.empty:
+        raise ValueError("清洗后数据为空（全部为无交易/缺价行）")
     return df
 
 

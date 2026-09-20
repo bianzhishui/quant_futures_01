@@ -94,6 +94,38 @@ def test_clean_daily_missing_close_raises() -> None:
         clean_daily(df)
 
 
+def test_clean_daily_drops_zero_volume() -> None:
+    """无交易行（volume=0）应被删除（方案 §3.2），价格停滞≠可交易。"""
+    df = pd.DataFrame(
+        {
+            "date": ["2020-01-01", "2020-01-02", "2020-01-03"],
+            "open": [1, 1, 2],
+            "high": [1, 1, 2],
+            "low": [1, 1, 2],
+            "close": [1.0, 1.0, 2.0],
+            "volume": [0, 100, 200],
+        }
+    )
+    out = clean_daily(df)
+    assert len(out) == 2  # 2020-01-01 无交易被删
+    assert out["date"].iloc[0].date().isoformat() == "2020-01-02"
+
+
+def test_clean_daily_all_zero_volume_raises() -> None:
+    df = pd.DataFrame(
+        {
+            "date": ["2020-01-01", "2020-01-02"],
+            "open": [1, 1],
+            "high": [1, 1],
+            "low": [1, 1],
+            "close": [1.0, 1.0],
+            "volume": [0, 0],
+        }
+    )
+    with pytest.raises(ValueError):
+        clean_daily(df)
+
+
 # ---------- 成本模型 ----------
 
 
@@ -161,6 +193,14 @@ def test_backtest_matches_manual() -> None:
     res = run_backtest(returns, w, cost)
     manual = _manual_backtest(returns, w, cost.one_side_pct)
     assert np.allclose(res.nav.to_numpy(), manual, rtol=1e-9, atol=1e-9)
+
+
+def test_run_backtest_empty_raises() -> None:
+    """空面板应清晰报错（提示先 fetch 数据），而非抛出 TypeError。"""
+    empty = pd.DataFrame()
+    cost = CostModel()
+    with pytest.raises(ValueError, match="无数据"):
+        run_backtest(empty, empty, cost)
 
 
 # ---------- 不变量（G4） ----------

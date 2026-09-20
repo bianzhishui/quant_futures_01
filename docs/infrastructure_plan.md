@@ -15,22 +15,29 @@
 | G2 复权正确性 | ✅ | sina 主连绝大多数换月跳变 < 阈值（20%），全池仅 NI0=1、FU0=2 个跳变日被置 0；非换月日复权收益 == 原始收益（测试 test_back_adjust_* 验证）；复权因子随数据落盘 |
 | G3 回测对拍 | ✅ | tests/test_backtest_matches_manual：手算净值 vs 引擎逐日一致（rtol 1e-9） |
 | G4 不变量 | ✅ | 基准 A/B 与 vol 回测：nav_reconstruct_max_err=0.0、yearly_compound_err≈2e-15、margin_breach=False |
-| G5 测试 | ✅ | pytest 23 全过；ruff format/check 0 错误；全部模块 import 通过 |
+| G5 测试 | ✅ | pytest 26 全过；ruff format/check 0 错误；全部模块 import 通过 |
 | G6 基准可复现 | ✅ | 基准两次运行输出逐字节一致（diff 为空） |
 
-**关键数字**（2018-01-02~2026-09-18，成本后；2026-09-20 review 修复后最终值）：
+**关键数字**（2018-01-02~2026-09-18，成本后；2026-09-20 两轮 review 修复后最终值）：
 
 | 基准/模式 | 年化收益 | 年化波动 | 夏普 | 最大回撤 | 成本拖累/年 |
 |---|---|---|---|---|---|
-| A 等权买入持有 | +6.06% | 13.4% | 0.45 | -25.2% | 0.20% |
-| B 20 日均线多空 | -4.86% | 9.7% | -0.50 | -39.3% | 4.25% |
-| 波动率目标（占位） | +3.98% | 8.4% | 0.47 | -15.9% | 0.27% |
+| A 等权买入持有 | +6.03% | 13.5% | 0.45 | -25.2% | 0.20% |
+| B 20 日均线多空 | -4.87% | 9.7% | -0.50 | -39.3% | 4.26% |
+| 波动率目标（占位） | +3.96% | 8.5% | 0.47 | -15.9% | 0.27% |
 
 **2026-09-20 review 修复记录（重要）**：
 1. **修复前视偏差**：`vol_target_weights` 原实现 vol[t] 含当天收益 r[t]（当天极端收益可改变当天权重，实测偏差最大 1.75），违反"T-1 决定、T 生效"——已改为 vol 整体 `shift(1)`（vol[t] 只用 returns[..t-1]）；补回归测试 `test_vol_weights_no_lookahead`；
 2. **修复上市前 NaN 污染**：原 `returns.fillna(0.0)` 把晚上市品种（SS0/SC0/EG0）上市前缺失收益填 0，压低滚动波动 → 上市初期权重虚高；等权基准也给未上市品种 1/N 权重制造虚假换手——已改为保留 NaN、等权/均线按**当日可交易品种数**归一化（上市前权重 0）；补回归测试 `test_equal_weights_prelisting`；
 3. 文档一致性：data.py 头注释（单文件含复权列）、AGENTS.md universe 冻结说明（由纪律保证、不触发 config 警告）；
 4. 修复后 vol 回测数字小幅回落（夏普 0.50→0.47）——前视去掉后的诚实值。
+
+**2026-09-20 review 第二轮记录（重要）**：
+1. **实证排除"后复权未来依赖"**：后复权序列锚定最新价，担心价格水平受未来数据影响。验证：全量 vs 截断构造的后复权序列，任取交易日的 close/MA20 比值逐位一致（锚定只引入全局常数，MA 类比较尺度不变）；且 adj_close 的 pct_change == r_adj（误差 1e-16，r_adj 只依赖局部原始收益）——**调整收益序列无未来依赖，可用**；
+2. **修复数据管道缺口（方案 §3.2 未落地）**：`clean_daily` 未删除"无交易行"（volume=0）。实测 FU0（燃料油）2018-01~06 有 **115 天无成交**（180CST 合约流动性枯竭期，价格停滞），旧实现把它们当可交易的 0 收益日（高估可交易性、低估波动）。已修复：volume==0 行删除 + 清洗后为空报错；FU0 行数 2102→1987，起始日 →2018-05-11；补测试 `test_clean_daily_drops_zero_volume` / `test_clean_daily_all_zero_volume_raises`；
+3. **空面板边界**：无数据时 `run_backtest` 原抛 TypeError（resample 需 DatetimeIndex），现改为清晰 ValueError（提示先 fetch）；补测试 `test_run_backtest_empty_raises`；
+4. **波动缺口成因实测**：vol 模式 Σ|w| 中位 0.82、90 分位 1.04、最大 1.31，**单品种触顶（max_pos_ratio=2.0）占比 0**——实际波动 8.5% < 目标 15% 纯粹来自"线性加权近似高估分散组合波动"，非截断所致；需协方差/缩放因子方案才可贴近目标（另预注册）；
+5. **诚实记录探测失误**：review 途中一次数据健全性探测脚本自身有 bug（把"连续非 0 收益天数"误报为"0 收益连跑"），一度误报全品种数据异常；修正后确认 29/30 品种最长连续 0 收益 ≤2 天（正常），仅 FU0 无交易段为真实异常（已修复）。
 
 **诚实局限（如实记录）**：
 1. vol 目标实际实现波动 8.4% < 目标 15%：权重用线性加权近似 + 品种间低相关分散 + max_pos_ratio 截断所致；如需更贴近目标须另预注册（协方差/缩放因子方案）；
@@ -39,8 +46,8 @@
 4. **基准/占位数字不代表任何策略收益**，仅为后续策略的对照基线；
 5. 品种池为"当前流动性 30 品种"的固定清单（2026 年选定），对 2018 年存在轻微事后选择偏差；未含 2018 年后才上市的新品种（如纯碱/尿素/生猪/工业硅/碳酸锂）。
 
-**产物**：data/futures_main_daily/*.parquet（30 个，gitignore）；output/data_summary.csv、output/baseline/compare.csv、output/backtest_vol_vol*.{csv,json}。
-**提交**：`feat: futures research infrastructure (data/cost/backtest/baseline)` + `fix: remove vol-target look-ahead & pre-listing NaN pollution (review)`（2026-09-20）。
+**产物**：data/futures_main_daily/*.parquet（30 个，gitignore；FU0 已剔除无交易日）；output/data_summary.csv、output/baseline/compare.csv、output/backtest_vol_vol*.{csv,json}。
+**提交**：`feat: futures research infrastructure (data/cost/backtest/baseline)` + `fix: remove vol-target look-ahead & pre-listing NaN pollution (review)` + `fix: drop zero-volume rows & guard empty backtest (review2)`（2026-09-20）。
 
 ---
 
@@ -111,7 +118,7 @@
 | # | 门禁 | 判定 |
 |---|---|---|
 | G1 | 数据完整性 | 每品种行数/日期范围可查；抽查 ≥5 个品种关键日收盘价与公开行情一致（如 2024-01-02 螺纹钢主力）；无 NaN 价格 |
-| G2 | 展期正确性 | 复权因子对拍：后复权序列任取两日价差 == 原始价差（允许换月跳空被消除的差异可解释） |
+| G2 | 展期正确性 | 复权收益自洽：adj_close 的 pct_change == r_adj（逐日一致，误差 < 1e-9）；非换月日复权收益 == 原始收益；换月日清单可查（is_roll 落盘） |
 | G3 | 回测对拍 | 给定合成信号（如恒多/恒空/恒零），手算单品种净值与框架输出逐日一致（误差 < 1e-6） |
 | G4 | 不变量 | §3.4-5 三项不变量抽查全过 |
 | G5 | 测试 | `uv run pytest` 全过；ruff format/check 0 错误；全部模块 import 通过 |
