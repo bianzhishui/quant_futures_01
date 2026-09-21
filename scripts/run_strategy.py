@@ -1,16 +1,18 @@
-"""TSMOM / vol-TSMOM 方案实施：主运行 + 灵敏度 + 子时段 + 成本敏感性 + 多空分解 + 门禁判定。
+"""动量族策略方案实施：主运行 + 灵敏度 + 子时段 + 成本敏感性 + 多空分解 + 门禁判定。
 
-预注册方案: docs/tsmom_plan.md / docs/tsmom_vol_plan.md（2026-09-20 批准）
+预注册方案: docs/tsmom_plan.md / docs/tsmom_vol_plan.md / docs/xsmom_plan.md（2026-09-20 批准）
 用法:
-    .venv/bin/python scripts/run_tsmom.py [--mode tsmom|tsmom_vol] [--bench equal|vol] [--config ...]
+    .venv/bin/python scripts/run_strategy.py [--mode tsmom|tsmom_vol|xsmom] [--bench equal|vol] [--config ...]
   - --mode tsmom:     等权幅度时序动量（对照基准 A 等权多头）
   - --mode tsmom_vol: 波动率目标幅度时序动量（对照基准 V = 波动率目标长多占位，增量门禁）
+  - --mode xsmom:     横截面动量 25/75 分位多空（对照基准 A；G3d = 多头腿必须有效）
 产物:
     output/{mode}_{L}_*.csv/json            主运行（指标/净值/分板块贡献）
     output/{mode}_sensitivity.csv           灵敏度 L∈{20,60,120,250} 净夏普
+    output/{mode}_quantile.csv              分位诊断 15/85、25/75、40/60（xsmom 模式）
     output/{mode}_subperiod.csv             子时段净夏普
     output/{mode}_cost_sens.csv             成本敏感性 ×0.5/×1/×2 净夏普
-    output/{mode}_legs.csv                  多空腿分解（tsmom_vol 模式）
+    output/{mode}_legs.csv                  多空腿分解
     output/{mode}_gates.json                门禁判定
 """
 
@@ -30,9 +32,11 @@ import pandas as pd
 from quant_futures_01 import config as cfgmod
 from quant_futures_01.cost import CostModel
 from quant_futures_01.portfolio import run_backtest, sector_contribution
+from quant_futures_01.strategy import xsmom_weights
 from backtest import generate_weights, load_adj_close_panel
 
 LOOKBACKS = [20, 60, 120, 250]
+QUANTILES = [0.15, 0.25, 0.40]  # 分位诊断（xsmom；短腿 ≤ q / 长腿 ≥ 1−q）
 SUB_PERIODS = [("2018-01-01", "2021-12-31"), ("2022-01-01", "2026-09-18")]
 COST_MULTIPLIERS = [0.5, 1.0, 2.0]
 
@@ -84,17 +88,19 @@ def _legs_contribution(returns: pd.DataFrame, weights: pd.DataFrame) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     cfgmod.add_config_arg(parser)
-    parser.add_argument("--mode", default="tsmom", choices=["tsmom", "tsmom_vol"])
+    parser.add_argument(
+        "--mode", default="tsmom", choices=["tsmom", "tsmom_vol", "xsmom"]
+    )
     parser.add_argument(
         "--bench",
         default=None,
         choices=["equal", "vol"],
-        help="G2 对照基准（默认 tsmom→equal，tsmom_vol→vol）",
+        help="G2 对照基准（默认 tsmom/xsmom→equal，tsmom_vol→vol）",
     )
     args = parser.parse_args()
     cfg = cfgmod.load_config(args.config)
     mode = args.mode
-    prefix = "tsmom_vol" if mode == "tsmom_vol" else "tsmom"
+    prefix = {"tsmom": "tsmom", "tsmom_vol": "tsmom_vol", "xsmom": "xsmom"}[mode]
     bench = args.bench or ("vol" if mode == "tsmom_vol" else "equal")
     out = Path(cfg.paths.output)
     out.mkdir(parents=True, exist_ok=True)
@@ -102,7 +108,7 @@ def main() -> None:
     closes = load_adj_close_panel(cfg)
     returns = closes.pct_change()
     base_cost = CostModel(cfg)
-    L = cfg.strategy.tsmom_lookback
+    L = cfg.strategy.tsmom_lookback if mode != "xsmom" else cfg.strategy.xsmom_lookback
 
     # ---- M2 主运行 ----
     metrics, sec, w_main = _metrics_for(closes, mode, cfg, base_cost, lookback=L)
@@ -134,6 +140,20 @@ def main() -> None:
     sens_df.to_csv(out / f"{prefix}_sensitivity.csv", index=False)
     print("\n=== M3 灵敏度 ===")
     print(sens_df.to_string(index=False))
+
+    # ---- M3b 分位诊断（xsmom 模式） ----
+    if mode == "xsmom":
+        q_rows = []
+        for q in QUANTILES:
+            wq = xsmom_weights(closes, L, q)
+            mq = run_backtest(returns, wq, base_cost).metrics
+            q_rows.append(
+                {"quantile": q, "sharpe": mq["sharpe"], "ann_return": mq["ann_return"]}
+            )
+        q_df = pd.DataFrame(q_rows)
+        q_df.to_csv(out / f"{prefix}_quantile.csv", index=False)
+        print("\n=== M3b 分位诊断 ===")
+        print(q_df.to_string(index=False))
 
     # ---- M4a 子时段 ----
     sub = []
@@ -197,7 +217,8 @@ def main() -> None:
     c20 = float(cost_df.loc[cost_df["cost_mult"] == 2.0, "sharpe"].iloc[0])
     g4 = c05 > 0 and c20 > 0
     long_leg, short_leg = legs["long_leg_cum"], legs["short_leg_cum"]
-    g3d = long_leg > 0 or short_leg < 0  # 非仅空头腿在赚钱
+    # G3d：xsmom 要求多头腿（赢家）必须有效；其余模式要求"非仅空头腿在赚钱"
+    g3d = (long_leg > 0) if mode == "xsmom" else (long_leg > 0 or short_leg < 0)
     gates = {
         "G2_incremental_vs_bench": {
             "pass": g2,

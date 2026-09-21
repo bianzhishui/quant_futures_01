@@ -353,3 +353,68 @@ def test_tsmom_generate_weights_integration() -> None:
     assert np.isclose(w["B"].iloc[120], -0.5)
     # 预热期（前 20 日）A 权重 0
     assert (w["A"].iloc[:20] == 0).all()
+
+
+# ---------- XSMOM 横截面动量（docs/xsmom_plan.md） ----------
+
+
+def _xs_closes(periods: int = 160) -> pd.DataFrame:
+    idx = pd.date_range("2020-01-01", periods=periods, freq="B")
+    n = np.arange(periods)
+    return pd.DataFrame(
+        {
+            "A": 100.0 + 1.0 * n,  # 最强上升
+            "B": 100.0 + 0.5 * n,  # 次强
+            "C": 100.0 - 0.5 * n,  # 次弱
+            "D": 100.0 - 1.0 * n,  # 最弱
+        },
+        index=idx,
+    )
+
+
+def test_xsmom_weights_ranking_and_legs() -> None:
+    from quant_futures_01.strategy import xsmom_weights
+
+    w = xsmom_weights(_xs_closes(), lookback=20, quantile=0.25)
+    # 预热期后某日：A(最升) 与 B(次升) 在多头腿（pct≥0.75），D(最跌) 在空头腿（pct≤0.25），C 中间
+    row = w.iloc[120]
+    assert np.isclose(row["A"], 0.5 / 2)  # 多头腿 2 只，等权 +0.25
+    assert np.isclose(row["B"], 0.5 / 2)
+    assert np.isclose(row["D"], -0.5)  # 空头腿 1 只，−0.5
+    assert row["C"] == 0.0
+    # 腿名义：多头 +0.5、空头 −0.5（dollar-neutral）
+    assert np.isclose(row.clip(lower=0).sum(), 0.5)
+    assert np.isclose(row.clip(upper=0).sum(), -0.5)
+    # 预热期（前 20 日）全 0
+    assert (w.iloc[:20] == 0).all().all()
+
+
+def test_xsmom_no_lookahead() -> None:
+    """w[t] 不得受 close[t] 影响（排序只用 T-1 及以前）。"""
+    from quant_futures_01.strategy import xsmom_weights
+
+    closes = _xs_closes()
+    w1 = xsmom_weights(closes, lookback=20, quantile=0.25)
+    closes2 = closes.copy()
+    closes2.iloc[60, 0] = 50.0  # 第 60 天 A 暴跌
+    w2 = xsmom_weights(closes2, lookback=20, quantile=0.25)
+    assert np.allclose(w1.iloc[:61].to_numpy(), w2.iloc[:61].to_numpy(), atol=1e-12)
+
+
+def test_xsmom_prelisting_excluded() -> None:
+    """晚上市品种不参与排名，权重 0；上市且预热期满后进入对应腿。"""
+    from quant_futures_01.strategy import xsmom_weights
+
+    idx = pd.date_range("2020-01-01", periods=120, freq="B")
+    n = np.arange(120)
+    closes = pd.DataFrame(index=idx, columns=["A", "B", "C", "D", "E"])
+    closes["A"] = 100.0 + 1.0 * n
+    closes["B"] = 100.0 + 0.5 * n
+    closes["C"] = 100.0 - 0.5 * n
+    closes["D"] = 100.0 - 0.2 * n
+    closes["E"] = np.nan
+    closes.iloc[60:, 4] = 300.0 - 3.0 * np.arange(60)  # E 第 60 天上市且为截面最弱
+    w = xsmom_weights(closes, lookback=20, quantile=0.25)
+    assert (w["E"].iloc[:60] == 0).all()  # 上市前不参与
+    # 上市且预热期满后，E 是截面最弱 → 空头腿
+    assert w["E"].iloc[100] < 0

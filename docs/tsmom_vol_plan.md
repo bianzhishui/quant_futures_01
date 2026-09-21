@@ -95,7 +95,7 @@
 
 | 步骤 | 内容 | 产物 |
 |---|---|---|
-| M1 | backtest.py 新增 `--weights tsmom_vol`（sig × vol 幅度）；run_tsmom.py 泛化 `--mode tsmom\|tsmom_vol --bench equal\|vol` | src/quant_futures_01/strategy.py（复用）、backtest.py |
+| M1 | backtest.py 新增 `--weights tsmom_vol`（sig × vol 幅度）；run_tsmom.py 更名 **run_strategy.py** 并泛化 `--mode tsmom\|tsmom_vol --bench equal\|vol` | src/quant_futures_01/strategy.py（复用）、backtest.py |
 | M2 | 主运行 vol-TSMOM L=120 + 基准 V | output/tsmom_vol_120_*.{csv,json} |
 | M3 | 灵敏度 L∈{20,60,120,250} | output/tsmom_vol_sensitivity.csv |
 | M4 | 子时段 + 成本敏感性 + **多空分解** | output/tsmom_vol_{subperiod,cost_sens,legs}.csv |

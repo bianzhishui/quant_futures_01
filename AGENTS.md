@@ -25,9 +25,9 @@
 | 脚本 | 用途 |
 |---|---|
 | scripts/fetch_data.py | 拉取主力连续日线 → 清洗 → 后复权 → data/futures_main_daily/*.parquet + output/data_summary.csv |
-| scripts/backtest.py | 回测 CLI：`--weights vol\|equal\|sma20\|tsmom [--sma N] [--lookback L] [--out 名]` |
+| scripts/backtest.py | 回测 CLI：`--weights vol\|equal\|sma20\|tsmom\|tsmom_vol\|xsmom [--sma N] [--lookback L] [--out 名]` |
 | scripts/run_baseline.py | 基准 A（等权）/B（20 日均线）对比，复用 backtest 引擎 |
-| scripts/run_tsmom.py | 时序动量方案实施：主运行 + 灵敏度 + 子时段 + 成本敏感性 + 门禁判定（见 docs/tsmom_plan.md） |
+| scripts/run_strategy.py | 动量族方案实施（--mode tsmom\|tsmom_vol\|xsmom）：主运行 + 灵敏度 + 子时段 + 成本敏感性 + 多空分解 + 门禁判定（见 docs/*_plan.md） |
 | scripts/example.py | 示例：配置框架用法（冒烟） |
 
 ## 4. 冻结参数（改前必须预注册 + 用户批准）
@@ -47,6 +47,8 @@ config/default.yaml 中冻结参数（config.py `FROZEN_PARAMS` 标注；覆盖�
 | backtest.vol_min | 0.05 | 年化波动下限（防爆仓） |
 | backtest.max_pos_ratio | 2.0 | 单品种名义上限（×权益） |
 | strategy.tsmom_lookback | 120 | TSMOM 回看窗口（计划冻结；CLI --lookback 覆盖仅用于灵敏度诊断） |
+| strategy.xsmom_lookback | 120 | XSMOM 排序回看窗口（计划冻结；CLI --lookback 覆盖仅用于灵敏度诊断） |
+| strategy.xsmom_quantile | 0.25 | XSMOM 分位（短腿 ≤q / 长腿 ≥1−q；计划冻结） |
 | params.window / top_ratio / limits.min_n | 21 / 0.2 / 50 | 脚手架占位（未用于策略，勿动） |
 
 ## 5. 研究纪律（不可省略）

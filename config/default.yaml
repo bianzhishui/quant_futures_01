@@ -68,9 +68,11 @@ backtest:
   max_pos_ratio: 2.0       # 单品种名义持仓上限（× 权益）
   signal_mode: "next_open" # 收盘信号 → 次日开盘成交
 
-# ---------- 策略（时序动量，预注册 docs/tsmom_plan.md） ----------
+# ---------- 策略（时序动量/横截面动量，预注册 docs/tsmom_plan.md、docs/xsmom_plan.md） ----------
 strategy:
   tsmom_lookback: 120      # TSMOM 回看窗口（计划冻结；CLI --lookback 覆盖仅用于灵敏度诊断）
+  xsmom_lookback: 120      # XSMOM 排序回看窗口（计划冻结；CLI --lookback 覆盖仅用于灵敏度诊断）
+  xsmom_quantile: 0.25     # XSMOM 分位（短腿 ≤ q、长腿 ≥ 1-q；计划冻结）
 
 # ---------- 实验/生产参数（冻结区，改动需预注册） ----------
 params:
