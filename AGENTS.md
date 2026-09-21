@@ -11,8 +11,8 @@
 已批准并实施 5 个预注册方案（[docs/RESEARCH.md](docs/RESEARCH.md) 为研究索引）：
 - 基础设施（数据管道 + 成本模型 + 波动率目标回测引擎 + 基准）✅；
 - 动量家族 3 方案（TSMOM / vol-TSMOM / XSMOM）全部 ❌ 否决——空头腿系统性失效、长多腿为正；
-- Carry 期限结构 🟡 部分通过（首个跑赢基准：夏普 +0.52 vs +0.51，backwardation 多头 +0.60；但 2022 后边际消失/远月定义敏感/有色集中）。
-核心证据倾向："**中国商品多头/backwardation 方向存在正溢价，空头方向无**"（双来源印证）。
+- Carry 期限结构 🟡 部分通过后经稳健性诊断**降级**（docs/carry_diag_plan.md）：正超额主要来自 6 个有色品种（非有色跑输基准）且远月定义不稳定（符号一致率 65%）→ 倾向放弃。
+研究证据倾向（如实）：**动量家族长多腿三轮一致为正（独立成立）**；"backwardation 溢价"作为第二来源**未获印证**；空头方向在全部 4 个含空方案中无正贡献。
 新方案仍须先预注册并经用户批准后实施。
 
 ## 2. 环境与运行
@@ -32,6 +32,7 @@
 | scripts/run_strategy.py | 动量族方案实施（--mode tsmom\|tsmom_vol\|xsmom）：主运行 + 灵敏度 + 子时段 + 成本敏感性 + 多空分解 + 门禁判定（见 docs/*_plan.md） |
 | scripts/fetch_termstructure.py | 拉取交易所逐合约日线 → 期限结构斜率因子（SHFE/CZCE/INE，20 品种 × 3 变体，DCE 接口失效暂排除） |
 | scripts/run_carry.py | carry 方案实施：主运行 + 定义稳健性 + 子时段 + 成本 + 多空分解 + 门禁（见 docs/carry_plan.md） |
+| scripts/run_carry_diag.py | carry 稳健性诊断：有色剥离 + 远月定义一致性 + 板块统计（见 docs/carry_diag_plan.md） |
 | scripts/example.py | 示例：配置框架用法（冒烟） |
 
 ## 4. 冻结参数（改前必须预注册 + 用户批准）
