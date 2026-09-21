@@ -1,14 +1,17 @@
-"""TSMOM 方案实施：主运行 + 灵敏度 + 子时段 + 成本敏感性 + 门禁判定。
+"""TSMOM / vol-TSMOM 方案实施：主运行 + 灵敏度 + 子时段 + 成本敏感性 + 多空分解 + 门禁判定。
 
-预注册方案: docs/tsmom_plan.md M2–M5（2026-09-20 批准）
+预注册方案: docs/tsmom_plan.md / docs/tsmom_vol_plan.md（2026-09-20 批准）
 用法:
-    .venv/bin/python scripts/run_tsmom.py [--config config/custom.yaml]
+    .venv/bin/python scripts/run_tsmom.py [--mode tsmom|tsmom_vol] [--bench equal|vol] [--config ...]
+  - --mode tsmom:     等权幅度时序动量（对照基准 A 等权多头）
+  - --mode tsmom_vol: 波动率目标幅度时序动量（对照基准 V = 波动率目标长多占位，增量门禁）
 产物:
-    output/tsmom_{L}_*.csv/json      主运行（指标/净值/分板块贡献）
-    output/tsmom_sensitivity.csv     灵敏度 L∈{20,60,120,250} 净夏普
-    output/tsmom_subperiod.csv       子时段净夏普
-    output/tsmom_cost_sens.csv       成本敏感性 ×0.5/×1/×2 净夏普
-    output/tsmom_gates.json          门禁 G2–G4 判定结果
+    output/{mode}_{L}_*.csv/json            主运行（指标/净值/分板块贡献）
+    output/{mode}_sensitivity.csv           灵敏度 L∈{20,60,120,250} 净夏普
+    output/{mode}_subperiod.csv             子时段净夏普
+    output/{mode}_cost_sens.csv             成本敏感性 ×0.5/×1/×2 净夏普
+    output/{mode}_legs.csv                  多空腿分解（tsmom_vol 模式）
+    output/{mode}_gates.json                门禁判定
 """
 
 from __future__ import annotations
@@ -65,36 +68,60 @@ def _metrics_for(
     return res.metrics, sec, res.weights
 
 
+def _legs_contribution(returns: pd.DataFrame, weights: pd.DataFrame) -> dict:
+    """多空腿分解：长多腿（w>0）与空头腿（w<0）的累计名义贡献。"""
+    long_leg = (weights.clip(lower=0.0) * returns.fillna(0.0)).sum(axis=1).cumsum()
+    short_leg = (weights.clip(upper=0.0) * returns.fillna(0.0)).sum(axis=1).cumsum()
+    return {
+        "long_leg_cum": float(long_leg.iloc[-1]) if len(long_leg) else float("nan"),
+        "short_leg_cum": float(short_leg.iloc[-1]) if len(short_leg) else float("nan"),
+        "total_cum": float(long_leg.iloc[-1] + short_leg.iloc[-1])
+        if len(long_leg)
+        else float("nan"),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     cfgmod.add_config_arg(parser)
+    parser.add_argument("--mode", default="tsmom", choices=["tsmom", "tsmom_vol"])
+    parser.add_argument(
+        "--bench",
+        default=None,
+        choices=["equal", "vol"],
+        help="G2 对照基准（默认 tsmom→equal，tsmom_vol→vol）",
+    )
     args = parser.parse_args()
     cfg = cfgmod.load_config(args.config)
+    mode = args.mode
+    prefix = "tsmom_vol" if mode == "tsmom_vol" else "tsmom"
+    bench = args.bench or ("vol" if mode == "tsmom_vol" else "equal")
     out = Path(cfg.paths.output)
     out.mkdir(parents=True, exist_ok=True)
 
     closes = load_adj_close_panel(cfg)
+    returns = closes.pct_change()
     base_cost = CostModel(cfg)
     L = cfg.strategy.tsmom_lookback
 
-    # ---- M2 主运行 L=120 ----
-    metrics, sec, _ = _metrics_for(closes, "tsmom", cfg, base_cost, lookback=L)
-    sec.to_csv(out / f"tsmom_{L}_sector.csv")
-    with open(out / f"tsmom_{L}_metrics.json", "w", encoding="utf-8") as f:
-        json.dump(metrics, f, ensure_ascii=False, indent=2)
-    print(f"=== M2 主运行 L={L} ===")
+    # ---- M2 主运行 ----
+    metrics, sec, w_main = _metrics_for(closes, mode, cfg, base_cost, lookback=L)
+    sec.to_csv(out / f"{prefix}_{L}_sector.csv")
+    with open(out / f"{prefix}_{L}_metrics.json", "w", encoding="utf-8") as f:
+        json.dump(_to_native(metrics), f, ensure_ascii=False, indent=2)
+    print(f"=== M2 主运行 mode={mode} L={L} ===")
     for k, v in metrics.items():
         print(f"  {k:20s} {v:.4f}" if isinstance(v, float) else f"  {k:20s} {v}")
 
-    # 基准 A 净夏普（G2 对照）
-    bench_metrics, _, _ = _metrics_for(closes, "equal", cfg, base_cost)
+    # 对照基准（G2）
+    bench_metrics, _, _ = _metrics_for(closes, bench, cfg, base_cost)
     bench_sharpe = bench_metrics["sharpe"]
-    tsmom_sharpe = metrics["sharpe"]
+    main_sharpe = metrics["sharpe"]
 
     # ---- M3 灵敏度 ----
     sens = []
     for lb in LOOKBACKS:
-        m, _, _ = _metrics_for(closes, "tsmom", cfg, base_cost, lookback=lb)
+        m, _, _ = _metrics_for(closes, mode, cfg, base_cost, lookback=lb)
         sens.append(
             {
                 "lookback": lb,
@@ -104,7 +131,7 @@ def main() -> None:
             }
         )
     sens_df = pd.DataFrame(sens)
-    sens_df.to_csv(out / "tsmom_sensitivity.csv", index=False)
+    sens_df.to_csv(out / f"{prefix}_sensitivity.csv", index=False)
     print("\n=== M3 灵敏度 ===")
     print(sens_df.to_string(index=False))
 
@@ -112,12 +139,12 @@ def main() -> None:
     sub = []
     for a, b in SUB_PERIODS:
         mask = (closes.index >= pd.Timestamp(a)) & (closes.index <= pd.Timestamp(b))
-        m, _, _ = _metrics_for(closes, "tsmom", cfg, base_cost, lookback=L, mask=mask)
+        m, _, _ = _metrics_for(closes, mode, cfg, base_cost, lookback=L, mask=mask)
         sub.append(
             {"period": f"{a}~{b}", "sharpe": m["sharpe"], "ann_return": m["ann_return"]}
         )
     sub_df = pd.DataFrame(sub)
-    sub_df.to_csv(out / "tsmom_subperiod.csv", index=False)
+    sub_df.to_csv(out / f"{prefix}_subperiod.csv", index=False)
     print("\n=== M4a 子时段 ===")
     print(sub_df.to_string(index=False))
 
@@ -129,16 +156,16 @@ def main() -> None:
             slippage_bps=cfg.cost.slippage_bps * mult,
             commission_bps=cfg.cost.commission_bps * mult,
         )
-        m, _, _ = _metrics_for(closes, "tsmom", cfg, cm, lookback=L)
+        m, _, _ = _metrics_for(closes, mode, cfg, cm, lookback=L)
         cost_sens.append(
             {"cost_mult": mult, "sharpe": m["sharpe"], "ann_return": m["ann_return"]}
         )
     cost_df = pd.DataFrame(cost_sens)
-    cost_df.to_csv(out / "tsmom_cost_sens.csv", index=False)
+    cost_df.to_csv(out / f"{prefix}_cost_sens.csv", index=False)
     print("\n=== M4b 成本敏感性 ===")
     print(cost_df.to_string(index=False))
 
-    # ---- M4c 板块集中度（主运行） ----
+    # ---- M4c 板块集中度 ----
     total = sec.sum(axis=1).iloc[-1]
     sec_contrib = {c: float(sec[c].iloc[-1]) for c in sec.columns}
     max_sec_ratio = (
@@ -148,11 +175,18 @@ def main() -> None:
     )
     print("\n=== M4c 板块集中度 ===")
     for c, v in sec_contrib.items():
-        print(f"  {c}: {v:+.3f} ({v / total * 100:+.1f}% 若 total≠0)")
+        print(f"  {c}: {v:+.3f} ({v / total * 100:+.1f}%)")
+
+    # ---- M4d 多空腿分解（tsmom_vol 诊断） ----
+    legs = _legs_contribution(returns, w_main)
+    pd.DataFrame([legs]).to_csv(out / f"{prefix}_legs.csv", index=False)
+    print("\n=== M4d 多空腿分解（累计名义贡献） ===")
+    for k, v in legs.items():
+        print(f"  {k}: {v:+.4f}")
 
     # ---- G 门禁判定 ----
     s_map = {row.lookback: row.sharpe for row in sens_df.itertuples()}
-    g2 = tsmom_sharpe > bench_sharpe
+    g2 = main_sharpe > bench_sharpe
     s_p1, s_p2 = [r.sharpe for r in sub_df.itertuples()]
     g3a = (s_p1 > 0) == (s_p2 > 0)
     g3b = (s_map.get(60, -9) >= 0 or s_map.get(250, -9) >= 0) and (
@@ -162,11 +196,13 @@ def main() -> None:
     c05 = float(cost_df.loc[cost_df["cost_mult"] == 0.5, "sharpe"].iloc[0])
     c20 = float(cost_df.loc[cost_df["cost_mult"] == 2.0, "sharpe"].iloc[0])
     g4 = c05 > 0 and c20 > 0
+    long_leg, short_leg = legs["long_leg_cum"], legs["short_leg_cum"]
+    g3d = long_leg > 0 or short_leg < 0  # 非仅空头腿在赚钱
     gates = {
-        "G2_net_sharpe_gt_bench": {
+        "G2_incremental_vs_bench": {
             "pass": g2,
-            "tsmom": tsmom_sharpe,
-            "bench_A": bench_sharpe,
+            f"{mode}": main_sharpe,
+            f"bench_{bench}": bench_sharpe,
         },
         "G3a_subperiod_same_sign": {"pass": g3a, "p1": s_p1, "p2": s_p2},
         "G3b_plateau": {
@@ -177,9 +213,10 @@ def main() -> None:
             "S250": s_map.get(250),
         },
         "G3c_sector_concentration": {"pass": g3c, "max_ratio": max_sec_ratio},
+        "G3d_legs_decomposition": {"pass": g3d, "long": long_leg, "short": short_leg},
         "G4_cost_sensitivity": {"pass": g4, "x0.5": c05, "x2.0": c20},
     }
-    with open(out / "tsmom_gates.json", "w", encoding="utf-8") as f:
+    with open(out / f"{prefix}_gates.json", "w", encoding="utf-8") as f:
         json.dump(_to_native(gates), f, ensure_ascii=False, indent=2)
     print("\n=== 门禁判定 ===")
     for k, v in gates.items():

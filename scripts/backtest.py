@@ -70,6 +70,12 @@ def generate_weights(
         lb = lookback if lookback is not None else cfg.strategy.tsmom_lookback
         sig = tsmom_signal(closes, lb)
         return sig.mul(one_over_n, axis=0).fillna(0.0)  # sig × 等权 1/N
+    if mode == "tsmom_vol":
+        lb = lookback if lookback is not None else cfg.strategy.tsmom_lookback
+        sig = tsmom_signal(closes, lb)
+        returns = closes.pct_change()
+        mag = vol_target_weights(returns, cfg)  # 波动率目标幅度（长多框架）
+        return sig.mul(mag, axis=0).fillna(0.0)  # sig × 波动率目标幅度（多空）
     raise ValueError(f"未知权重模式: {mode}")
 
 
@@ -99,8 +105,8 @@ def main() -> None:
     parser.add_argument(
         "--weights",
         default="vol",
-        choices=["vol", "equal", "sma20", "tsmom"],
-        help="权重模式（tsmom 为时序动量，--lookback 指定回看窗口）",
+        choices=["vol", "equal", "sma20", "tsmom", "tsmom_vol"],
+        help="权重模式（tsmom 等权幅度 / tsmom_vol 波动率目标幅度；--lookback 指定回看窗口）",
     )
     parser.add_argument("--sma", type=int, default=20)
     parser.add_argument(
@@ -116,7 +122,9 @@ def main() -> None:
 
     cfg = cfgmod.load_config(args.config)
     lb = args.lookback if args.lookback is not None else cfg.strategy.tsmom_lookback
-    name = args.out or (f"tsmom_{lb}" if args.weights == "tsmom" else args.weights)
+    name = args.out or (
+        f"tsmom_{lb}" if args.weights in ("tsmom", "tsmom_vol") else args.weights
+    )
     metrics, nav_df, inv, sec = run_mode(args.weights, cfg, sma=args.sma, lookback=lb)
 
     out = Path(cfg.paths.output)
