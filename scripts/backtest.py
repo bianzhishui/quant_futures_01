@@ -29,6 +29,7 @@ from quant_futures_01.portfolio import (
     sector_contribution,
     vol_target_weights,
 )
+from quant_futures_01.strategy import tsmom_signal
 
 
 def load_adj_close_panel(cfg) -> pd.DataFrame:
@@ -48,14 +49,14 @@ def load_adj_close_panel(cfg) -> pd.DataFrame:
 
 
 def generate_weights(
-    mode: str, closes: pd.DataFrame, cfg, sma: int = 20
+    mode: str, closes: pd.DataFrame, cfg, sma: int = 20, lookback: int | None = None
 ) -> pd.DataFrame:
     """目标权重（信号用 ≤T-1 数据，T 日生效；上市前品种权重 0，按当日可交易品种归一化）。"""
     tradable = closes.notna()
     cnt = tradable.sum(axis=1).replace(0, np.nan)  # 当日可交易品种数
+    one_over_n = tradable.div(cnt, axis=0).fillna(0.0)  # 等权 1/N（上市前 0）
     if mode == "equal":
-        w = tradable.div(cnt, axis=0).fillna(0.0)  # 等权多头（每日再平衡）
-        return w
+        return one_over_n
     if mode == "sma20":
         ma = closes.rolling(sma).mean()
         sign = np.where(closes > ma, 1.0, -1.0)
@@ -65,16 +66,20 @@ def generate_weights(
     if mode == "vol":
         returns = closes.pct_change()
         return vol_target_weights(returns, cfg)
+    if mode == "tsmom":
+        lb = lookback if lookback is not None else cfg.strategy.tsmom_lookback
+        sig = tsmom_signal(closes, lb)
+        return sig.mul(one_over_n, axis=0).fillna(0.0)  # sig × 等权 1/N
     raise ValueError(f"未知权重模式: {mode}")
 
 
 def run_mode(
-    mode: str, cfg, sma: int = 20
+    mode: str, cfg, sma: int = 20, lookback: int | None = None
 ) -> tuple[dict, pd.DataFrame, dict, pd.DataFrame]:
     """跑一种权重模式，返回 (metrics, nav_df, invariants, sector_df)。"""
     closes = load_adj_close_panel(cfg)
     returns = closes.pct_change()  # 保留 NaN（上市前），引擎内部处理
-    target_w = generate_weights(mode, closes, cfg, sma=sma)
+    target_w = generate_weights(mode, closes, cfg, sma=sma, lookback=lookback)
     res = run_backtest(returns, target_w, CostModel(cfg))
     sector_map = {u["symbol"]: u["sector"] for u in cfg.universe}
     sec = sector_contribution(returns, res.weights, sector_map)
@@ -91,16 +96,28 @@ def run_mode(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     cfgmod.add_config_arg(parser)
-    parser.add_argument("--weights", default="vol", choices=["vol", "equal", "sma20"])
+    parser.add_argument(
+        "--weights",
+        default="vol",
+        choices=["vol", "equal", "sma20", "tsmom"],
+        help="权重模式（tsmom 为时序动量，--lookback 指定回看窗口）",
+    )
     parser.add_argument("--sma", type=int, default=20)
+    parser.add_argument(
+        "--lookback",
+        type=int,
+        default=None,
+        help="TSMOM 回看窗口（默认取 config strategy.tsmom_lookback）",
+    )
     parser.add_argument(
         "--out", default=None, help="输出文件名前缀（默认取 --weights）"
     )
     args = parser.parse_args()
 
     cfg = cfgmod.load_config(args.config)
-    name = args.out or args.weights
-    metrics, nav_df, inv, sec = run_mode(args.weights, cfg, sma=args.sma)
+    lb = args.lookback if args.lookback is not None else cfg.strategy.tsmom_lookback
+    name = args.out or (f"tsmom_{lb}" if args.weights == "tsmom" else args.weights)
+    metrics, nav_df, inv, sec = run_mode(args.weights, cfg, sma=args.sma, lookback=lb)
 
     out = Path(cfg.paths.output)
     out.mkdir(parents=True, exist_ok=True)
@@ -113,7 +130,10 @@ def main() -> None:
             {"metrics": metrics, "invariants": inv}, f, ensure_ascii=False, indent=2
         )
 
-    print(f"模式: {args.weights}（sma={args.sma}）  回测天数: {len(nav_df)}")
+    if args.weights == "tsmom":
+        print(f"模式: tsmom（lookback={lb}）  回测天数: {len(nav_df)}")
+    else:
+        print(f"模式: {args.weights}（sma={args.sma}）  回测天数: {len(nav_df)}")
     print("指标:")
     for k, v in metrics.items():
         print(f"  {k:20s} {v:.4f}" if isinstance(v, float) else f"  {k:20s} {v}")

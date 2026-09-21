@@ -290,3 +290,66 @@ def test_equal_weights_prelisting() -> None:
     assert w["A"].iloc[start - 1] == 1.0
     assert np.isclose(w["A"].iloc[start], 0.5)
     assert np.isclose(w["B"].iloc[start], 0.5)
+
+
+# ---------- TSMOM 信号（docs/tsmom_plan.md） ----------
+
+
+def _ts_closes(
+    periods: int = 200, slope: float = 0.5, start: float = 100.0
+) -> pd.DataFrame:
+    idx = pd.date_range("2020-01-01", periods=periods, freq="B")
+    price = start + slope * np.arange(periods)
+    return pd.DataFrame({"A": price}, index=idx)
+
+
+def test_tsmom_signal_direction() -> None:
+    from quant_futures_01.strategy import tsmom_signal
+
+    up = tsmom_signal(_ts_closes(slope=0.5), lookback=20)
+    down = tsmom_signal(_ts_closes(slope=-0.5), lookback=20)
+    flat = tsmom_signal(_ts_closes(slope=0.0), lookback=20)
+    # 稳定上升 → 信号 +1（预热期后）；下降 → -1；横盘 → 0
+    assert (up.iloc[30:] == 1.0).all().all()
+    assert (down.iloc[30:] == -1.0).all().all()
+    assert (flat.iloc[30:] == 0.0).all().all()
+
+
+def test_tsmom_signal_no_lookahead() -> None:
+    """sig[t] 不得受 close[t] 影响（只用到 T-1 及以前）。"""
+    from quant_futures_01.strategy import tsmom_signal
+
+    closes = _ts_closes(slope=0.5)
+    sig1 = tsmom_signal(closes, lookback=20)
+    closes2 = closes.copy()
+    # 在第 60 天制造极端下跌（close[60] 从 130 → 50）
+    closes2.iloc[60, 0] = 50.0
+    sig2 = tsmom_signal(closes2, lookback=20)
+    # t<=60 的信号不得因 close[60] 改变
+    assert np.allclose(sig1.iloc[:61].to_numpy(), sig2.iloc[:61].to_numpy())
+    # 预热期前 lookback 行为 0
+    assert (sig1.iloc[:20] == 0).all().all()
+
+
+def test_tsmom_generate_weights_integration() -> None:
+    """generate_weights('tsmom')：权重 = 方向信号 × 等权 1/N，且上市前为 0。"""
+    import sys
+    from pathlib import Path
+
+    scripts_dir = Path(__file__).resolve().parent.parent / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    from backtest import generate_weights
+
+    idx = pd.date_range("2020-01-01", periods=150, freq="B")
+    closes = pd.DataFrame(index=idx, columns=["A", "B"])
+    closes["A"] = 100.0 + np.arange(150)  # 上升
+    closes["B"] = np.nan
+    closes.iloc[80:, 1] = 100.0 - 0.5 * np.arange(70)  # B 从第 80 天起上市并下跌
+    w = generate_weights("tsmom", closes, cfgmod.get_config(), lookback=20)
+    # B 上市前权重 0；上市后 A 多(+1/N)、B 空(-1/N)
+    assert w["B"].iloc[79] == 0.0
+    assert np.isclose(w["A"].iloc[120], 0.5)
+    assert np.isclose(w["B"].iloc[120], -0.5)
+    # 预热期（前 20 日）A 权重 0
+    assert (w["A"].iloc[:20] == 0).all()
