@@ -418,3 +418,78 @@ def test_xsmom_prelisting_excluded() -> None:
     assert (w["E"].iloc[:60] == 0).all()  # 上市前不参与
     # 上市且预热期满后，E 是截面最弱 → 空头腿
     assert w["E"].iloc[100] < 0
+
+
+# ---------- 期限结构 / carry（docs/carry_plan.md） ----------
+
+
+def test_build_slopes_basic() -> None:
+    """斜率 = F1/F2−1，F1/F2 按持仓量排序；同日不足 2 合约跳过。"""
+    from quant_futures_01.termstructure import build_slopes
+
+    df = pd.DataFrame(
+        {
+            "date": ["20200102", "20200102", "20200103", "20200103", "20200103"],
+            "symbol": ["RB01", "RB05", "RB01", "RB05", "RB10"],
+            "close": [3500.0, 3600.0, 3510.0, 3610.0, 3700.0],
+            "open_interest": [100, 80, 110, 90, 5],
+            "volume": [1000, 800, 1100, 900, 50],
+        }
+    )
+    s = build_slopes(df, "oi1")
+    assert len(s) == 2
+    # 2020-01-02: F1=RB01(oi100) F2=RB05(oi80) → slope=3500/3600−1
+    r0 = s[s["date"] == pd.Timestamp("2020-01-02")].iloc[0]
+    assert r0["F1"] == "RB01" and r0["F2"] == "RB05"
+    assert np.isclose(r0["slope"], 3500 / 3600 - 1)
+    # 2020-01-03: F1=RB01(oi110) F2=RB05(oi90)
+    r1 = s[s["date"] == pd.Timestamp("2020-01-03")].iloc[0]
+    assert r1["F1"] == "RB01" and r1["F2"] == "RB05"
+
+
+def test_build_slopes_date_robust() -> None:
+    """int/str/object（混入空表）三种日期输入都能正确解析。"""
+    from quant_futures_01.termstructure import build_slopes
+
+    rows = {
+        "date": [20180102, 20180102, 20180103, 20180103],  # int
+        "symbol": ["RB01", "RB05", "RB01", "RB05"],
+        "close": [3500.0, 3600.0, 3510.0, 3610.0],
+        "open_interest": [100, 80, 110, 90],
+        "volume": [1000, 800, 1100, 900],
+    }
+    for make in [
+        lambda: pd.DataFrame(rows),
+        lambda: pd.DataFrame({k: [str(v) for v in vals] for k, vals in rows.items()}),
+    ]:
+        s = build_slopes(make(), "oi1")
+        assert len(s) == 2
+        assert s["date"].iloc[0] == pd.Timestamp("2018-01-02")
+
+
+def test_carry_weights_sign_lag() -> None:
+    """carry 权重 = sign(slope) × 1/N；slope[t] 影响 w[t+1]（T-1 决定、无前视）。"""
+    import sys
+    from pathlib import Path
+
+    scripts_dir = Path(__file__).resolve().parent.parent / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    from backtest import carry_weights
+
+    idx = pd.date_range("2020-01-01", periods=8, freq="B")
+    closes = pd.DataFrame({"A": 100.0, "B": 100.0}, index=idx)
+    slope = pd.DataFrame(
+        {
+            "A": [np.nan, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01],
+            "B": [np.nan, -0.01, -0.01, -0.01, -0.01, -0.01, -0.01, -0.01],
+        },
+        index=idx,
+    )
+    w = carry_weights(closes, slope, cfgmod.get_config())
+    # slope[1]=+0.01(A)/-0.01(B) → w[2] = A 多、B 空；w[1] 应为 0（信号 1 日后生效）
+    assert w["A"].iloc[1] == 0.0
+    assert np.isclose(w["A"].iloc[2], 0.5)
+    assert np.isclose(w["B"].iloc[2], -0.5)
+    # slope 恒 NaN 行（第 0 天）→ 0
+    assert w["A"].iloc[0] == 0.0

@@ -30,6 +30,21 @@ from quant_futures_01.portfolio import (
     vol_target_weights,
 )
 from quant_futures_01.strategy import tsmom_signal, xsmom_weights
+from quant_futures_01.termstructure import load_slope_panel
+
+
+def carry_weights(closes, slope_panel, cfg, amplitude: bool = False):
+    """carry 权重：sign(slope) × 1/N（或 |slope| 幅度加权）；T-1 决定、T 生效。"""
+    s = slope_panel.shift(1).reindex(index=closes.index).reindex(columns=closes.columns)
+    if amplitude:
+        denom = s.abs().sum(axis=1).replace(0, np.nan)
+        return s.div(denom, axis=0).fillna(0.0)
+    sig = pd.DataFrame(0.0, index=closes.index, columns=closes.columns)
+    sig[s > 0] = 1.0
+    sig[s < 0] = -1.0
+    has = s.notna() & closes.notna()
+    n = has.sum(axis=1).replace(0, np.nan)
+    return sig.mul(has.div(n, axis=0), axis=0).fillna(0.0)
 
 
 def load_adj_close_panel(cfg) -> pd.DataFrame:
@@ -49,7 +64,12 @@ def load_adj_close_panel(cfg) -> pd.DataFrame:
 
 
 def generate_weights(
-    mode: str, closes: pd.DataFrame, cfg, sma: int = 20, lookback: int | None = None
+    mode: str,
+    closes: pd.DataFrame,
+    cfg,
+    sma: int = 20,
+    lookback: int | None = None,
+    slope_variant: str = "oi1",
 ) -> pd.DataFrame:
     """目标权重（信号用 ≤T-1 数据，T 日生效；上市前品种权重 0，按当日可交易品种归一化）。"""
     tradable = closes.notna()
@@ -79,6 +99,9 @@ def generate_weights(
     if mode == "xsmom":
         lb = lookback if lookback is not None else cfg.strategy.xsmom_lookback
         return xsmom_weights(closes, lb, cfg.strategy.xsmom_quantile)
+    if mode == "carry":
+        slope = load_slope_panel(slope_variant, cfg)
+        return carry_weights(closes, slope, cfg)
     raise ValueError(f"未知权重模式: {mode}")
 
 
@@ -108,8 +131,8 @@ def main() -> None:
     parser.add_argument(
         "--weights",
         default="vol",
-        choices=["vol", "equal", "sma20", "tsmom", "tsmom_vol", "xsmom"],
-        help="权重模式（tsmom 等权幅度 / tsmom_vol 波动率目标幅度 / xsmom 截面动量；--lookback 指定回看窗口）",
+        choices=["vol", "equal", "sma20", "tsmom", "tsmom_vol", "xsmom", "carry"],
+        help="权重模式（tsmom/tsmom_vol/xsmom 动量族，carry 期限结构；--lookback 指定回看窗口）",
     )
     parser.add_argument("--sma", type=int, default=20)
     parser.add_argument(

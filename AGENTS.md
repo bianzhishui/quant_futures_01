@@ -25,9 +25,11 @@
 | 脚本 | 用途 |
 |---|---|
 | scripts/fetch_data.py | 拉取主力连续日线 → 清洗 → 后复权 → data/futures_main_daily/*.parquet + output/data_summary.csv |
-| scripts/backtest.py | 回测 CLI：`--weights vol\|equal\|sma20\|tsmom\|tsmom_vol\|xsmom [--sma N] [--lookback L] [--out 名]` |
+| scripts/backtest.py | 回测 CLI：`--weights vol\|equal\|sma20\|tsmom\|tsmom_vol\|xsmom\|carry [--sma N] [--lookback L] [--out 名]` |
 | scripts/run_baseline.py | 基准 A（等权）/B（20 日均线）对比，复用 backtest 引擎 |
 | scripts/run_strategy.py | 动量族方案实施（--mode tsmom\|tsmom_vol\|xsmom）：主运行 + 灵敏度 + 子时段 + 成本敏感性 + 多空分解 + 门禁判定（见 docs/*_plan.md） |
+| scripts/fetch_termstructure.py | 拉取交易所逐合约日线 → 期限结构斜率因子（SHFE/CZCE/INE，20 品种 × 3 变体，DCE 接口失效暂排除） |
+| scripts/run_carry.py | carry 方案实施：主运行 + 定义稳健性 + 子时段 + 成本 + 多空分解 + 门禁（见 docs/carry_plan.md） |
 | scripts/example.py | 示例：配置框架用法（冒烟） |
 
 ## 4. 冻结参数（改前必须预注册 + 用户批准）
