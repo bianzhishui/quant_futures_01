@@ -1,8 +1,8 @@
-"""回测引擎 CLI：波动率目标 / 等权 / 简单均线 三种权重模式。
+"""回测引擎 CLI：基准/动量族/carry 等多种权重模式。
 
-预注册方案: docs/infrastructure_plan.md M5/M6（2026-09-20 批准）
+预注册方案: docs/infrastructure_plan.md M5/M6 等（2026-09-20 起批准）
 用法:
-    .venv/bin/python scripts/backtest.py --weights vol|equal|sma20 [--sma N] [--out 名称]
+    .venv/bin/python scripts/backtest.py --weights vol|equal|sma20|tsmom|tsmom_vol|xsmom|carry [--sma N] [--lookback L] [--out 名称]
 产物:
     output/backtest_{out}_{mode}.csv          （净值/换手/分板块贡献）
     output/backtest_{out}_{mode}_metrics.json （指标 + 不变量）

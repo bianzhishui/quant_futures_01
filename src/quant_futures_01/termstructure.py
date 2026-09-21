@@ -71,6 +71,12 @@ def build_slopes(daily: pd.DataFrame, variant: str) -> pd.DataFrame:
     同日无两个 close>0 合约 → 该日跳过（防 divide-by-zero）。
     """
     df = daily.copy()
+    required = {"date", "symbol", "close", RANK_COL[variant]}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"build_slopes({variant}) 缺列: {sorted(missing)}，实际列: {list(df.columns)}"
+        )
     # 稳健日期归一：兼容 int(20180102)/str('20180326')/ISO('2018-01-02')/datetime；
     # 注意 concat 混入空 DataFrame 后日期列可能被提升为 object dtype，须统一处理。
     s = df["date"].astype(str).str.strip()

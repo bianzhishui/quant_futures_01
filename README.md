@@ -1,7 +1,7 @@
 # quant_futures_01
 
 期货量化研究项目：**全品种商品期货**的策略探索、回测与数据研究。
-基础设施方案见 [docs/infrastructure_plan.md](docs/infrastructure_plan.md)（2026-09-20 批准）。
+研究进度总览见 [docs/RESEARCH.md](docs/RESEARCH.md)；基础设施方案见 [docs/infrastructure_plan.md](docs/infrastructure_plan.md)。
 
 ## 环境
 

@@ -70,6 +70,11 @@ def main() -> None:
     closes = _subset_closes(cfg)
     returns = closes.pct_change()
     base_cost = CostModel(cfg)
+    slope_main = load_slope_panel("oi1", cfg)
+    if closes.empty:
+        raise SystemExit("无主力连续数据：先运行 scripts/fetch_data.py")
+    if slope_main.shape[1] == 0:
+        raise SystemExit("无期限结构数据：先运行 scripts/fetch_termstructure.py")
 
     # ---- G0a: F1 与主力连续对拍（抽查 3 品种 × 3 日） ----
     checks = []
@@ -98,7 +103,6 @@ def main() -> None:
     print(pd.DataFrame(checks).to_string(index=False))
 
     # ---- M2 主运行（oi1 符号，等权） ----
-    slope_main = load_slope_panel("oi1", cfg)
     w_main = carry_weights(closes, slope_main, cfg)
     metrics, w_main2 = _run(closes, w_main, base_cost)
     sector_map = {u["symbol"]: u["sector"] for u in carry_symbols(cfg)}
