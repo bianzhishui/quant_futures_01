@@ -13,7 +13,7 @@
 - 动量家族 3 方案（TSMOM / vol-TSMOM / XSMOM）全部 ❌ 否决；
 - Carry 期限结构 🟡 部分通过后经诊断**降级**；
 - **动量长多腿诊断（docs/momentum_diag_plan.md）**：最后一个"长多腿为正"的发现也证伪——正贡献 **94~471% 来自贵金属+有色**，剔除后残余 ≈0。
-**研究结论（如实，2026-09-21）**：5 方案的全部信号发现归结为 **2018-2026 有色+贵金属超级牛市的板块 beta**（沪银 ≈10.5 倍）——非可交易 edge；空头方向在全部含空方案中无正贡献。**组合/风控层（docs/portfolio_risk_plan.md）**：协方差波动率目标已采纳为新默认风险框架（实现波动 8.5%→15.3% 贴近目标、夏普不变），回撤减仓 overlay 被数据证伪否决（夏普 0.47→0.27）。
+**研究结论（如实，2026-09-21，含样本外修正）**：**窗口结构比策略设计更决定结果**——2018-2026 是金属单边牛市（信号发现 = 金属 beta 幻觉、空头必亏）；**样本外复验（outsample_plan.md）证明该结论是窗口特定的**：2010-2017 危机 regime 中趋势信号跑赢深亏基准（+0.07 vs −0.25）、空头腿 +0.11 正贡献、动量赢家是农产品/黑色（非金属）。风控层：协方差波动率目标已采纳为新默认（2018-26 实现波动 15.3%），回撤减仓 overlay 证伪否决。回测默认窗口已扩至 2010-01-01。
 新方案仍须先预注册并经用户批准后实施。
 
 ## 2. 环境与运行
@@ -37,6 +37,7 @@
 | scripts/run_momentum_diag.py | 动量长多腿板块诊断：板块分解 + 剔除贵金属有色复算 + 时段（见 docs/momentum_diag_plan.md） |
 | scripts/run_rollsim.py | 测量补全：逐合约执行对拍 + TSMOM 复验 + 金属现货/展期分解（见 docs/measurement_plan.md） |
 | scripts/run_risk_layer.py | 组合/风控层评估：V/V2(协方差)/V3(回撤减仓) 对比 + 灵敏度 + 空头约束诊断（见 docs/portfolio_risk_plan.md） |
+| scripts/run_outsample.py | 样本外扩展复验：W1(2010-17) vs W2(2018-26) 趋势/空头/板块/风控框架（见 docs/outsample_plan.md） |
 | scripts/example.py | 示例：配置框架用法（冒烟） |
 
 ## 4. 冻结参数（改前必须预注册 + 用户批准）
@@ -50,7 +51,7 @@ config/default.yaml 中冻结参数（config.py `FROZEN_PARAMS` 标注；覆盖�
 | cost.slippage_bps | 5 | 滑点 0.05% 单边 |
 | cost.commission_bps | 2 | 手续费 0.02% 单边（≈交易所标准×2 近似） |
 | cost.margin_ratio | 0.10 | 保证金率 |
-| backtest.start_date | 2018-01-01 | 回测起点 |
+| backtest.start_date | 2010-01-01 | 回测起点（2026-09-21 由 2018 扩窗，见 outsample_plan.md） |
 | backtest.vol_target | 0.15 | 目标年化波动 |
 | backtest.vol_window | 60 | 滚动波动窗口（日） |
 | backtest.vol_min | 0.05 | 年化波动下限（防爆仓） |

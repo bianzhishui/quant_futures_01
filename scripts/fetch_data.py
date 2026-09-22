@@ -30,9 +30,9 @@ from quant_futures_01.data import (
 )
 
 
-def fetch_one(symbol: str, name: str, sector: str, cfg) -> dict:
+def fetch_one(symbol: str, name: str, sector: str, cfg, start_date: str) -> dict:
     """单品种：拉取 → 清洗 → 后复权 → 落盘，返回质量摘要行。"""
-    df = fetch_akshare_main_daily(symbol, cfg.data.start_date)
+    df = fetch_akshare_main_daily(symbol, start_date)
     raw = clean_daily(df)
     adj = back_adjust(raw, cfg.data.adjust_threshold)
     save_daily(symbol, adj)
@@ -59,10 +59,16 @@ def main() -> None:
     parser.add_argument(
         "--pause", type=float, default=None, help="请求间停顿秒数（默认取配置）"
     )
+    parser.add_argument(
+        "--start-date",
+        default=None,
+        help="起始日期（默认取 config data.start_date；样本外扩窗传更早日期，如 2005-01-01）",
+    )
     args = parser.parse_args()
 
     cfg = cfgmod.load_config(args.config)
     pause = args.pause if args.pause is not None else cfg.fetch.sample.pause
+    start_date = args.start_date if args.start_date else cfg.data.start_date
 
     uni = cfg.universe
     if args.symbols:
@@ -77,7 +83,7 @@ def main() -> None:
             flush=True,
         )
         try:
-            rows.append(fetch_one(u["symbol"], u["name"], u["sector"], cfg))
+            rows.append(fetch_one(u["symbol"], u["name"], u["sector"], cfg, start_date))
         except Exception as e:  # noqa: BLE001 —— 单品种失败记录并继续，摘要如实呈现
             fails.append(f"{u.symbol}: {type(e).__name__}: {str(e)[:120]}")
             print(f"    ❌ {fails[-1]}", flush=True)
