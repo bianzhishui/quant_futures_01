@@ -35,6 +35,7 @@
 | scripts/run_carry.py | carry 方案实施：主运行 + 定义稳健性 + 子时段 + 成本 + 多空分解 + 门禁（见 docs/carry_plan.md） |
 | scripts/run_carry_diag.py | carry 稳健性诊断：有色剥离 + 远月定义一致性 + 板块统计（见 docs/carry_diag_plan.md） |
 | scripts/run_momentum_diag.py | 动量长多腿板块诊断：板块分解 + 剔除贵金属有色复算 + 时段（见 docs/momentum_diag_plan.md） |
+| scripts/run_rollsim.py | 测量补全：逐合约执行对拍 + TSMOM 复验 + 金属现货/展期分解（见 docs/measurement_plan.md） |
 | scripts/example.py | 示例：配置框架用法（冒烟） |
 
 ## 4. 冻结参数（改前必须预注册 + 用户批准）

@@ -493,3 +493,50 @@ def test_carry_weights_sign_lag() -> None:
     assert np.isclose(w["B"].iloc[2], -0.5)
     # slope 恒 NaN 行（第 0 天）→ 0
     assert w["A"].iloc[0] == 0.0
+
+
+# ---------- 逐合约执行模型（docs/measurement_plan.md） ----------
+
+
+def test_oi_main_returns_and_roll() -> None:
+    """OI 主力收益 = 持有合约同合约 close-to-close；换月标记正确；重建连续自洽。"""
+    from quant_futures_01.rollsim import oi_main_returns, reconstruct_continuous
+
+    idx = pd.date_range("2020-01-01", periods=6, freq="B")
+    g = 1.01 ** np.arange(6)
+    closes = pd.DataFrame(
+        {
+            "A": 100.0 * g,  # 每日 +1%
+            "B": 90.0 * g,  # 每日 +1%
+        },
+        index=idx,
+    )
+    ois = pd.DataFrame(
+        {"A": [100, 100, 50, 50, 50, 50], "B": [50, 50, 100, 100, 100, 100]},
+        index=idx,
+    )  # 第 3 天起 B 取代 A 成为 OI 最大
+    rets, roll = oi_main_returns(closes, ois)
+    # 第 0 天无前收盘 → 0；此后每日 +1%（A/B 均为几何 +1%/日，同合约自身收益）
+    assert rets.iloc[0] == 0.0
+    assert np.allclose(rets.iloc[1:], 0.01)
+    # 第 3 天（index=2）换月
+    assert roll.iloc[2] == 1 and roll.iloc[3] == 0 and roll.iloc[0] == 0
+    # 重建连续自洽：recon[t]/recon[t-1]−1 == rets[t]
+    recon = reconstruct_continuous(rets)
+    assert np.allclose(recon.pct_change().fillna(0.0), rets, atol=1e-12)
+
+
+def test_oi_main_new_contract_first_day() -> None:
+    """持有合约在换月日无前收盘（新上市首日）→ 收益 0，不崩。"""
+    from quant_futures_01.rollsim import oi_main_returns
+
+    idx = pd.date_range("2020-01-01", periods=3, freq="B")
+    closes = pd.DataFrame(
+        {"A": [100.0, 101.0, 102.0], "B": [np.nan, np.nan, 91.0]},
+        index=idx,
+    )  # B 第 3 天才上市
+    ois = pd.DataFrame({"A": [100, 90, 10], "B": [0, 0, 100]}, index=idx)
+    rets, roll = oi_main_returns(closes, ois)
+    assert np.isfinite(rets).all()
+    assert roll.iloc[2] == 1
+    assert np.isclose(rets.iloc[2], 0.0)  # B 上市首日无前收盘 → 0
