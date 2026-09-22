@@ -540,3 +540,42 @@ def test_oi_main_new_contract_first_day() -> None:
     assert np.isfinite(rets).all()
     assert roll.iloc[2] == 1
     assert np.isclose(rets.iloc[2], 0.0)  # B 上市首日无前收盘 → 0
+
+
+# ---------- 组合/风控层（docs/portfolio_risk_plan.md） ----------
+
+
+def test_cov_vol_target_no_lookahead() -> None:
+    """协方差波动率目标权重不得用当天收益（cov[t] 仅含 returns[..t-1]）。"""
+    from quant_futures_01.portfolio import cov_vol_target_weights
+
+    idx = pd.date_range("2020-01-01", periods=100, freq="B")
+    rng = np.random.default_rng(3)
+    base = pd.DataFrame(
+        {c: rng.normal(0, 0.01, len(idx)) for c in ("A", "B", "C")}, index=idx
+    )
+    r1 = base.copy()
+    r2 = base.copy()
+    r2.iloc[70, 0] = 0.30  # 第 70 天 A 极端收益
+    w1 = cov_vol_target_weights(r1)
+    w2 = cov_vol_target_weights(r2)
+    assert np.allclose(w1.iloc[:71].to_numpy(), w2.iloc[:71].to_numpy(), atol=1e-12)
+    assert not np.isnan(w1.to_numpy()).any()
+
+
+def test_drawdown_scale_rules() -> None:
+    """回撤减仓阶梯规则 + T-1 决定（无前视）。"""
+    from quant_futures_01.portfolio import drawdown_scale
+
+    # 净值：先涨 10% 再跌 25%（回撤达 20%+），再涨回
+    idx = pd.date_range("2020-01-01", periods=10, freq="B")
+    nav = np.array([1.0, 1.05, 1.10, 1.05, 0.95, 0.85, 0.90, 0.95, 1.0, 1.05])
+    prices = pd.Series(nav, index=idx)
+    returns = prices.pct_change().fillna(0.0)
+    scale = drawdown_scale(returns)
+    # t=4: DD(prev)=-4.5% <6% → 1.0；t=6: DD(prev)=1-0.85/1.10=-22.7% ≥20% → 0.25
+    assert np.isclose(scale.iloc[4], 1.0)
+    assert np.isclose(scale.iloc[6], 0.25)
+    assert np.isclose(scale.iloc[5], 0.5)  # DD(prev)=1-0.95/1.10=-13.6% ≥12% → 0.5
+    # 恢复：t=8 DD(prev)=1-0.95/1.10=-13.6% 仍 ≥12%（未 <6%）→ 0.5 或 0.25，不得为 1
+    assert scale.iloc[8] < 1.0

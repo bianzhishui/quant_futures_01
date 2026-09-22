@@ -67,6 +67,7 @@ backtest:
   vol_min: 0.05            # 年化波动下限（截断防爆仓）
   max_pos_ratio: 2.0       # 单品种名义持仓上限（× 权益）
   signal_mode: "next_open" # 收盘信号 → 次日开盘成交
+  vol_estimator: "cov"     # 波动率目标组合波动估计：cov（协方差，新默认）/ linear（线性，旧）
 
 # ---------- 策略（时序动量/横截面动量，预注册 docs/tsmom_plan.md、docs/xsmom_plan.md） ----------
 strategy:

@@ -48,6 +48,7 @@ FROZEN_PARAMS = [
     ("backtest", "vol_window", "波动窗口"),
     ("backtest", "vol_min", "波动下限"),
     ("backtest", "max_pos_ratio", "单品种名义上限"),
+    ("backtest", "vol_estimator", "波动估计器"),
 ]
 
 

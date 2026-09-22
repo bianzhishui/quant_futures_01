@@ -25,9 +25,9 @@ from quant_futures_01 import config as cfgmod
 from quant_futures_01.cost import CostModel
 from quant_futures_01.data import load_daily
 from quant_futures_01.portfolio import (
+    framework_vol_weights,
     run_backtest,
     sector_contribution,
-    vol_target_weights,
 )
 from quant_futures_01.strategy import tsmom_signal, xsmom_weights
 from quant_futures_01.termstructure import load_slope_panel
@@ -85,7 +85,7 @@ def generate_weights(
         return w.shift(1).fillna(0.0)  # T-1 决定 → T 生效
     if mode == "vol":
         returns = closes.pct_change()
-        return vol_target_weights(returns, cfg)
+        return framework_vol_weights(returns, cfg)
     if mode == "tsmom":
         lb = lookback if lookback is not None else cfg.strategy.tsmom_lookback
         sig = tsmom_signal(closes, lb)
@@ -94,7 +94,7 @@ def generate_weights(
         lb = lookback if lookback is not None else cfg.strategy.tsmom_lookback
         sig = tsmom_signal(closes, lb)
         returns = closes.pct_change()
-        mag = vol_target_weights(returns, cfg)  # 波动率目标幅度（长多框架）
+        mag = framework_vol_weights(returns, cfg)  # 波动率目标幅度（默认协方差框架）
         return sig.mul(mag, axis=0).fillna(0.0)  # sig × 波动率目标幅度（多空）
     if mode == "xsmom":
         lb = lookback if lookback is not None else cfg.strategy.xsmom_lookback

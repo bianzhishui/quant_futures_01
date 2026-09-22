@@ -14,6 +14,7 @@
 | 4 | Carry 期限结构 | [carry_plan.md](carry_plan.md) + [carry_diag_plan.md](carry_diag_plan.md) | 🟡→❌ 诊断降级 | +0.52 vs 基准 A +0.51（首跑赢，但诊断后不可靠） | 超额主要来自 6 个有色品种、远月定义不稳定（符号一致率 65%）→ 倾向放弃 |
 | 5 | 动量长多腿诊断 | [momentum_diag_plan.md](momentum_diag_plan.md) | ❌ 板块 beta | — | 长多腿正贡献 94~471% 来自贵金属+有色；剔除后残余 ≈0（XSMOM 转负）→ 最后一个发现也证伪 |
 | 6 | 测量补全（逐合约执行） | [measurement_plan.md](measurement_plan.md) | ✅ 复验稳健 | 重建 TSMOM −0.16 vs sina −0.30（同号） | 金属 beta 结论在干净测量下稳健；金属牛市为**现货驱动**（沪银展期 −69%）；发现 sina 连续系统性低估 backwardated/高估 contango |
+| 7 | 组合/风控层 | [portfolio_risk_plan.md](portfolio_risk_plan.md) | 🟡 部分采纳 | V2 夏普 0.472 / 波动 15.3% | 协方差波动率目标**采纳为新默认**（波动缺口 8.5%→15.3% 收敛、夏普不变）；回撤减仓 overlay **证伪否决**（夏普 0.47→0.27） |
 
 ## 核心研究结论（跨方案，2026-09-21 终版）
 

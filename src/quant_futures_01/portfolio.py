@@ -53,6 +53,97 @@ def vol_target_weights(
     return w.fillna(0.0)
 
 
+def _rolling_cov_portfolio_vol(
+    returns: pd.DataFrame, w_rel: pd.DataFrame, window: int, min_periods: int
+) -> pd.Series:
+    """滚动协方差组合波动（无前视：每期协方差用截至 T-1 的窗口）。
+
+    组合波动[t] = sqrt(w_rel[t] · Σ[t] · w_rel[t])，Σ[t] 由 returns[..t-1] 估计。
+    预热期不足 → NaN（由调用方兜底到线性近似）。
+    """
+    out = pd.Series(np.nan, index=returns.index, dtype=float)
+    for i, t in enumerate(returns.index):
+        hist = returns.iloc[max(0, i - window) : i]  # 截至 t-1，不含 t
+        hist = hist.dropna(how="all")
+        if len(hist) < min_periods:
+            continue
+        try:
+            cov = hist.cov()
+        except Exception:  # noqa: BLE001 —— 数值异常兜底
+            continue
+        if cov.empty:
+            continue
+        w = w_rel.loc[t].reindex(cov.index).fillna(0.0).to_numpy()
+        port_var = float(w @ cov.to_numpy() @ w)
+        if port_var > 0 and np.isfinite(port_var):
+            out.loc[t] = np.sqrt(port_var) * np.sqrt(TRADING_DAYS)
+    return out
+
+
+def framework_vol_weights(
+    returns: pd.DataFrame, cfg: cfgmod.Config | None = None
+) -> pd.DataFrame:
+    """默认风险框架权重（docs/portfolio_risk_plan.md，2026-09-21 采纳）。
+
+    按 config `backtest.vol_estimator` 选择：'cov'（协方差波动率目标，新默认）/
+    'linear'（线性加权近似，旧）。未来策略/基准统一走本函数，保证同口径。
+    """
+    c = cfg or cfgmod.get_config()
+    if getattr(c.backtest, "vol_estimator", "linear") == "cov":
+        return cov_vol_target_weights(returns, c)
+    return vol_target_weights(returns, c)
+
+
+def cov_vol_target_weights(
+    returns: pd.DataFrame, cfg: cfgmod.Config | None = None
+) -> pd.DataFrame:
+    """协方差波动率目标权重（组合/风控层 v2，docs/portfolio_risk_plan.md）。
+
+    与 vol_target_weights 同相对权重，但组合波动改用滚动协方差估计（线性加权低估分散
+    组合波动，导致实现波动 8.4% << 目标 15%）。预热期/数值异常兜底到线性近似。
+    """
+    c = cfg or cfgmod.get_config()
+    vol = (
+        rolling_annual_vol(returns, c.backtest.vol_window)
+        .shift(1)
+        .clip(lower=c.backtest.vol_min)
+    )
+    inv = 1.0 / vol
+    w_rel = inv.div(inv.sum(axis=1), axis=0)
+    port_vol_cov = _rolling_cov_portfolio_vol(
+        returns, w_rel, c.backtest.vol_window, min_periods=40
+    )
+    port_vol_lin = (w_rel * vol).sum(axis=1)
+    port_vol = port_vol_cov.fillna(port_vol_lin).replace(0, np.nan)
+    leverage = (c.backtest.vol_target / port_vol).replace([np.inf, -np.inf], np.nan)
+    w = w_rel.mul(leverage, axis=0)
+    w = w.clip(upper=c.backtest.max_pos_ratio)
+    return w.fillna(0.0)
+
+
+def drawdown_scale(
+    returns: pd.Series,
+    dd_mid: float = 0.12,
+    dd_high: float = 0.20,
+    dd_low: float = 0.06,
+    scale_mid: float = 0.5,
+    scale_high: float = 0.25,
+) -> pd.Series:
+    """回撤减仓乘子（组合/风控层 v3 overlay，docs/portfolio_risk_plan.md）。
+
+    阶梯规则（冻结）: 相对运行峰值回撤 DD（T-1 计算，无前视）
+      回撤深度 ≥ dd_high(20%) → ×scale_high(0.25)；≥ dd_mid(12%) → ×scale_mid(0.5)；< dd_low(6%) → ×1.0。
+    """
+    nav = (1.0 + returns.fillna(0.0)).cumprod()
+    dd = nav / nav.cummax() - 1.0  # DD ≤ 0（负值表示回撤深度）
+    scale = pd.Series(1.0, index=returns.index, dtype=float)
+    dds = dd.shift(1).fillna(0.0)  # T-1 决定 → T 生效
+    scale[dds <= -dd_mid] = scale_mid  # 回撤深度 ≥ 12% → ×0.5
+    scale[dds <= -dd_high] = scale_high  # 回撤深度 ≥ 20% → ×0.25
+    scale[dds > -dd_low] = 1.0  # 回撤浅于 6%（|DD| < 6%）→ 恢复满仓
+    return scale
+
+
 @dataclass
 class BacktestResult:
     nav: pd.Series

@@ -13,7 +13,7 @@
 - 动量家族 3 方案（TSMOM / vol-TSMOM / XSMOM）全部 ❌ 否决；
 - Carry 期限结构 🟡 部分通过后经诊断**降级**；
 - **动量长多腿诊断（docs/momentum_diag_plan.md）**：最后一个"长多腿为正"的发现也证伪——正贡献 **94~471% 来自贵金属+有色**，剔除后残余 ≈0。
-**研究结论（如实，2026-09-21）**：5 方案的全部信号发现归结为 **2018-2026 有色+贵金属超级牛市的板块 beta**（沪银 ≈10.5 倍）——非可交易 edge；空头方向在全部含空方案中无正贡献。在该样本上继续挖信号意义低，建议转向组合/风控层。
+**研究结论（如实，2026-09-21）**：5 方案的全部信号发现归结为 **2018-2026 有色+贵金属超级牛市的板块 beta**（沪银 ≈10.5 倍）——非可交易 edge；空头方向在全部含空方案中无正贡献。**组合/风控层（docs/portfolio_risk_plan.md）**：协方差波动率目标已采纳为新默认风险框架（实现波动 8.5%→15.3% 贴近目标、夏普不变），回撤减仓 overlay 被数据证伪否决（夏普 0.47→0.27）。
 新方案仍须先预注册并经用户批准后实施。
 
 ## 2. 环境与运行
@@ -36,6 +36,7 @@
 | scripts/run_carry_diag.py | carry 稳健性诊断：有色剥离 + 远月定义一致性 + 板块统计（见 docs/carry_diag_plan.md） |
 | scripts/run_momentum_diag.py | 动量长多腿板块诊断：板块分解 + 剔除贵金属有色复算 + 时段（见 docs/momentum_diag_plan.md） |
 | scripts/run_rollsim.py | 测量补全：逐合约执行对拍 + TSMOM 复验 + 金属现货/展期分解（见 docs/measurement_plan.md） |
+| scripts/run_risk_layer.py | 组合/风控层评估：V/V2(协方差)/V3(回撤减仓) 对比 + 灵敏度 + 空头约束诊断（见 docs/portfolio_risk_plan.md） |
 | scripts/example.py | 示例：配置框架用法（冒烟） |
 
 ## 4. 冻结参数（改前必须预注册 + 用户批准）
@@ -54,6 +55,7 @@ config/default.yaml 中冻结参数（config.py `FROZEN_PARAMS` 标注；覆盖�
 | backtest.vol_window | 60 | 滚动波动窗口（日） |
 | backtest.vol_min | 0.05 | 年化波动下限（防爆仓） |
 | backtest.max_pos_ratio | 2.0 | 单品种名义上限（×权益） |
+| backtest.vol_estimator | cov | 波动率目标组合波动估计（cov 协方差新默认 / linear 旧线性） |
 | strategy.tsmom_lookback | 120 | TSMOM 回看窗口（计划冻结；CLI --lookback 覆盖仅用于灵敏度诊断） |
 | strategy.xsmom_lookback | 120 | XSMOM 排序回看窗口（计划冻结；CLI --lookback 覆盖仅用于灵敏度诊断） |
 | strategy.xsmom_quantile | 0.25 | XSMOM 分位（短腿 ≤q / 长腿 ≥1−q；计划冻结） |
