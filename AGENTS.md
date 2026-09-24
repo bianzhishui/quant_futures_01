@@ -41,6 +41,7 @@
 | scripts/run_cheap_extreme.py | 贱极扫描器（傅海棠框架）：价格低分位+深跌候选池 + 历史事件验证 + 阶段二政策/库存分组（见 docs/cheap_extreme_plan.md、docs/stock_macro_plan.md） |
 | scripts/fetch_macro.py | 宏观信贷管道：M2 月度（2008+）→ data/macro/m2_monthly.csv |
 | scripts/fetch_warehouse.py | SHFE 历史仓单管道：get_receipt 月批量 → data/warehouse/{VAR}.parquet（13 品种 2015+） |
+| scripts/run_screener.py | 组合筛选器：贱极∧政策宽松 候选池 + 历史分组验证（见 docs/screener_plan.md、docs/Screener_使用说明.md） |
 | scripts/example.py | 示例：配置框架用法（冒烟） |
 
 ## 4. 冻结参数（改前必须预注册 + 用户批准）
