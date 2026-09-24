@@ -25,12 +25,15 @@ from quant_futures_01 import config as cfgmod
 from quant_futures_01.cost import CostModel
 from quant_futures_01.cheap_extreme import (
     drawdown_from_high,
+    m2_policy_state,
     price_percentile,
     term_slope_percentile,
     vol_percentile,
+    warehouse_low,
 )
 from quant_futures_01.termstructure import load_slope_panel
 from backtest import load_adj_close_panel
+from fetch_warehouse import SHFE_VARS
 
 P_LO = 0.10  # 贱极分位门槛
 DD_LO = -0.30  # 深跌门槛
@@ -246,6 +249,138 @@ def main() -> None:
             print("→ 🟡 部分通过（标注 regime 依赖等）")
         else:
             print("→ ❌ 价格极低分位代理无边际，止步于扫描工具")
+
+        # ============ 阶段二：V1 政策转向 / V2 库存低位（docs/stock_macro_plan.md） ============
+        # 宏观状态
+        macro_path = Path(cfg.paths.data) / "macro" / "m2_monthly.csv"
+        if macro_path.exists():
+            m2 = pd.read_csv(macro_path)
+            policy = m2_policy_state(m2, pd.DatetimeIndex(ev_df["event_date"]))
+            ev_df["policy_loose"] = policy.values
+            # 仓单库存（SHFE 品种）
+            wh_dir = Path(cfg.paths.data) / "warehouse"
+            stock_flags = {}
+            for var in SHFE_VARS:
+                p = wh_dir / f"{var}.parquet"
+                if p.exists():
+                    wh = pd.read_parquet(p)
+                    rec = wh.set_index("date")["receipt"]
+                    stock_flags[var] = warehouse_low(rec)
+
+            def _stock_low(row):
+                var = row["symbol"][:-1]
+                s = stock_flags.get(var)
+                if s is None:
+                    return None
+                hist = s[s.index <= row["event_date"]]
+                return bool(hist.iloc[-1]) if len(hist) else None
+
+            ev_df["stock_low"] = ev_df.apply(_stock_low, axis=1)
+            # V1 政策分组
+            v1_rows = []
+            for state, label in [(True, "宽松"), (False, "收紧")]:
+                sub = ev_df[ev_df["policy_loose"] == state]
+                if sub.empty:
+                    continue
+                v1_rows.append(
+                    {
+                        "policy": label,
+                        "n_events_6m": int((sub["hold"] == "6m").sum()),
+                        "excess_6m": round(
+                            float(sub[sub["hold"] == "6m"]["excess"].mean()), 4
+                        )
+                        if (sub["hold"] == "6m").any()
+                        else None,
+                        "excess_12m": round(
+                            float(sub[sub["hold"] == "12m"]["excess"].mean()), 4
+                        )
+                        if (sub["hold"] == "12m").any()
+                        else None,
+                    }
+                )
+            v1_df = pd.DataFrame(v1_rows)
+            v1_df.to_csv(out / "stage2_policy.csv", index=False)
+            print("\n=== V1 政策转向分组（M2 宽松 vs 收紧）===")
+            print(v1_df.to_string(index=False))
+            # V2 库存分组（SHFE 品种）
+            sub_wh = ev_df[ev_df["stock_low"].notna()]
+            if len(sub_wh):
+                v2_rows = []
+                for low, label in [(True, "库存低位"), (False, "库存非低")]:
+                    s2 = sub_wh[sub_wh["stock_low"] == low]
+                    if s2.empty:
+                        continue
+                    v2_rows.append(
+                        {
+                            "stock": label,
+                            "n_events_6m": int((s2["hold"] == "6m").sum()),
+                            "excess_6m": round(
+                                float(s2[s2["hold"] == "6m"]["excess"].mean()), 4
+                            )
+                            if (s2["hold"] == "6m").any()
+                            else None,
+                            "excess_12m": round(
+                                float(s2[s2["hold"] == "12m"]["excess"].mean()), 4
+                            )
+                            if (s2["hold"] == "12m").any()
+                            else None,
+                        }
+                    )
+                v2_df = pd.DataFrame(v2_rows)
+                v2_df.to_csv(out / "stage2_stock.csv", index=False)
+                print(
+                    "\n=== V2 库存分组（仓单滚动 3 年分位 ≤20% = 低位，SHFE 品种）==="
+                )
+                print(v2_df.to_string(index=False))
+                loose6 = (
+                    v1_df[v1_df["policy"] == "宽松"]["excess_6m"].iloc[0]
+                    if len(v1_df[v1_df["policy"] == "宽松"])
+                    else None
+                )
+                tight6 = (
+                    v1_df[v1_df["policy"] == "收紧"]["excess_6m"].iloc[0]
+                    if len(v1_df[v1_df["policy"] == "收紧"])
+                    else None
+                )
+                low6 = (
+                    v2_df[v2_df["stock"] == "库存低位"]["excess_6m"].iloc[0]
+                    if len(v2_df[v2_df["stock"] == "库存低位"])
+                    else None
+                )
+                nonlow6 = (
+                    v2_df[v2_df["stock"] == "库存非低"]["excess_6m"].iloc[0]
+                    if len(v2_df[v2_df["stock"] == "库存非低"])
+                    else None
+                )
+                g2 = bool(
+                    loose6 is not None
+                    and tight6 is not None
+                    and loose6 > tight6
+                    and loose6 > 0
+                )
+                g3 = bool(
+                    low6 is not None
+                    and nonlow6 is not None
+                    and low6 > nonlow6
+                    and low6 > 0
+                )
+                stage2_gates = {
+                    "G2_policy_loose_enhances": {
+                        "pass": g2,
+                        "loose_6m": loose6,
+                        "tight_6m": tight6,
+                    },
+                    "G3_stock_low_enhances": {
+                        "pass": g3,
+                        "low_6m": low6,
+                        "nonlow_6m": nonlow6,
+                    },
+                }
+                with open(out / "stage2_gates.json", "w", encoding="utf-8") as f:
+                    json.dump(_to_native(stage2_gates), f, ensure_ascii=False, indent=2)
+                print("\n=== 阶段二门禁 ===")
+                for k, v in stage2_gates.items():
+                    print(f"  {k}: {'✅' if v['pass'] else '❌'}  {v}")
 
 
 if __name__ == "__main__":

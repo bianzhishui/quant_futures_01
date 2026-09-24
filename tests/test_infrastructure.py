@@ -629,3 +629,44 @@ def test_dedup_events() -> None:
     assert kept == [idx[0], idx[70], idx[130]]
     # 空输入
     assert _dedup_events(pd.DatetimeIndex([]), idx, min_gap=60) == []
+
+
+# ---------- 阶段二：库存/政策维度（docs/stock_macro_plan.md） ----------
+
+
+def test_parse_cn_month() -> None:
+    from quant_futures_01.cheap_extreme import _parse_cn_month
+
+    assert _parse_cn_month("2008年01月份") == pd.Timestamp("2008-01-01")
+    assert _parse_cn_month("2026年08月份") == pd.Timestamp("2026-08-01")
+    assert pd.isna(_parse_cn_month("bad"))
+
+
+def test_warehouse_low() -> None:
+    """仓单近期处于低分位 → 库存低位标记 True。"""
+    from quant_futures_01.cheap_extreme import warehouse_low
+
+    idx = pd.date_range("2020-01-01", periods=800, freq="B")
+    n = np.arange(800)
+    rec = pd.Series(
+        np.where(n < 760, 5000 + (n % 100) * 20, 200.0 + (n % 5) * 10), index=idx
+    )
+    low = warehouse_low(rec, window=300, min_periods=250)
+    assert low.iloc[-1] == True  # noqa: E712 —— 仓单骤降到低位
+
+
+def test_m2_policy_state() -> None:
+    """M2 同比上升段 → 宽松（True）；平稳/下降 → 收紧。"""
+    from quant_futures_01.cheap_extreme import m2_policy_state
+
+    months = pd.date_range("2015-01-01", periods=48, freq="MS")
+    m2 = pd.DataFrame(
+        {
+            "month": [f"{d.year}年{d.month:02d}月份" for d in months],
+            "m2_yoy": [8.0] * 24 + [12.0] * 24,  # 后 2 年明显上升
+        }
+    )
+    dates = pd.DatetimeIndex([pd.Timestamp("2016-06-15"), pd.Timestamp("2018-06-15")])
+    state = m2_policy_state(m2, dates, window=36)
+    assert bool(state.iloc[0]) is False  # 2016-06 仍在 8% 段 → 收紧
+    assert bool(state.iloc[1]) is True  # 2018-06 已进入 12% 段 → 宽松

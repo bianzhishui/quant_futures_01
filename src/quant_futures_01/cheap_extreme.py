@@ -13,6 +13,8 @@
 
 from __future__ import annotations
 
+import re
+
 import numpy as np
 import pandas as pd
 
@@ -61,3 +63,37 @@ def vol_percentile(
 def term_slope_percentile(slope: pd.Series, window: int = PCT_WINDOW) -> pd.Series:
     """期限结构斜率的历史分位（低分位 = 深度 contango/悲观）。"""
     return _rolling_pct(slope, window, PCT_MIN)
+
+
+def warehouse_low(
+    receipt: pd.Series, window: int = 756, min_periods: int = 300
+) -> pd.Series:
+    """仓单滚动 3 年（756 交易日）分位 ≤ 0.20 → 库存低位（布尔）。"""
+    pct = _rolling_pct(receipt, window, min_periods)
+    return pct <= 0.20
+
+
+def _parse_cn_month(s) -> pd.Timestamp | pd.NaT:
+    """解析 '2008年01月份' → Timestamp（月度首日）。"""
+    m = re.match(r"(\d{4})年(\d{1,2})月", str(s))
+    if m:
+        return pd.Timestamp(int(m.group(1)), int(m.group(2)), 1)
+    return pd.NaT
+
+
+def m2_policy_state(m2: pd.DataFrame, dates, window: int = 36) -> pd.Series:
+    """M2 同比的宽松/收紧状态（事件日所属月）。
+
+    规则（冻结）：宽松 = 该月 M2 同比 > 过去 36 个月滚动中位数（min_periods=12）；否则收紧。
+    返回 index=dates 的 Series（bool；无对应月/数据不足 → None）。
+    """
+    mm = m2["month"].map(_parse_cn_month)
+    s = pd.Series(pd.to_numeric(m2["m2_yoy"], errors="coerce").values, index=mm)
+    s = s[~s.index.isna()].sort_index()
+    median = s.rolling(window, min_periods=12).median()
+    loose = s > median
+    periods = pd.DatetimeIndex(dates).to_period("M")
+    months = s.index.to_period("M")
+    lookup = dict(zip(months, loose.values))
+    out = [lookup.get(p) for p in periods]
+    return pd.Series(out, index=pd.DatetimeIndex(dates))
