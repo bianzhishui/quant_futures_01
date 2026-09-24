@@ -25,11 +25,7 @@ import pandas as pd
 
 from quant_futures_01 import config as cfgmod
 from quant_futures_01.cost import CostModel
-from quant_futures_01.portfolio import (
-    cov_vol_target_weights,
-    run_backtest,
-    sector_contribution,
-)
+from quant_futures_01.portfolio import cov_vol_target_weights, run_backtest
 from backtest import generate_weights, load_adj_close_panel
 
 W1 = ("2010-01-01", "2017-12-31")

@@ -579,3 +579,34 @@ def test_drawdown_scale_rules() -> None:
     assert np.isclose(scale.iloc[5], 0.5)  # DD(prev)=1-0.95/1.10=-13.6% ≥12% → 0.5
     # 恢复：t=8 DD(prev)=1-0.95/1.10=-13.6% 仍 ≥12%（未 <6%）→ 0.5 或 0.25，不得为 1
     assert scale.iloc[8] < 1.0
+
+
+# ---------- 贱极候选池维度（docs/cheap_extreme_plan.md） ----------
+
+
+def test_price_percentile_and_drawdown() -> None:
+    """现价在窗口低分位 → D1 低；从高点回撤 → D2 为负（深跌）。"""
+    from quant_futures_01.cheap_extreme import drawdown_from_high, price_percentile
+
+    idx = pd.date_range("2020-01-01", periods=520, freq="B")
+    # 前 500 日高位（105±5），最后 20 日暴跌到 70——暴跌须在窗口内
+    n = np.arange(520)
+    price = np.where(n < 500, 105.0 + np.sin(n) * 5.0, 70.0 + np.sin(n) * 2.0)
+    close = pd.Series(price, index=idx)
+    d1 = price_percentile(close, window=300, min_periods=250)
+    d2 = drawdown_from_high(close, window=250)
+    assert d1.iloc[-1] < 0.10  # 暴跌后处于窗口内低分位
+    assert d2.iloc[-1] < -0.20  # 从 ~105 跌到 ~70 → 回撤 > 30%
+    # 预热期（历史不足）→ NaN
+    assert pd.isna(d1.iloc[100])
+
+
+def test_vol_percentile_sanity() -> None:
+    """恒定波动序列的分位应接近 0.5（非极端）。"""
+    from quant_futures_01.cheap_extreme import vol_percentile
+
+    idx = pd.date_range("2020-01-01", periods=800, freq="B")
+    rng = np.random.default_rng(11)
+    returns = pd.Series(rng.normal(0, 0.01, len(idx)), index=idx)
+    vp = vol_percentile(returns)
+    assert 0.2 < vp.iloc[-1] < 0.8

@@ -38,6 +38,7 @@
 | scripts/run_rollsim.py | 测量补全：逐合约执行对拍 + TSMOM 复验 + 金属现货/展期分解（见 docs/measurement_plan.md） |
 | scripts/run_risk_layer.py | 组合/风控层评估：V/V2(协方差)/V3(回撤减仓) 对比 + 灵敏度 + 空头约束诊断（见 docs/portfolio_risk_plan.md） |
 | scripts/run_outsample.py | 样本外扩展复验：W1(2010-17) vs W2(2018-26) 趋势/空头/板块/风控框架（见 docs/outsample_plan.md） |
+| scripts/run_cheap_extreme.py | 贱极扫描器（傅海棠框架）：价格低分位+深跌候选池 + 历史事件验证（见 docs/cheap_extreme_plan.md） |
 | scripts/example.py | 示例：配置框架用法（冒烟） |
 
 ## 4. 冻结参数（改前必须预注册 + 用户批准）
