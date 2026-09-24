@@ -610,3 +610,22 @@ def test_vol_percentile_sanity() -> None:
     returns = pd.Series(rng.normal(0, 0.01, len(idx)), index=idx)
     vp = vol_percentile(returns)
     assert 0.2 < vp.iloc[-1] < 0.8
+
+
+def test_dedup_events() -> None:
+    """事件去重：相邻事件间隔 ≥ min_gap 交易日才保留新事件。"""
+    import sys
+    from pathlib import Path
+
+    scripts_dir = Path(__file__).resolve().parent.parent / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    from run_cheap_extreme import _dedup_events
+
+    idx = pd.date_range("2020-01-01", periods=200, freq="B")
+    # 事件：0、10（<60 被去重）、70、130、135（<60 被去重）
+    dates = pd.DatetimeIndex([idx[0], idx[10], idx[70], idx[130], idx[135]])
+    kept = _dedup_events(dates, idx, min_gap=60)
+    assert kept == [idx[0], idx[70], idx[130]]
+    # 空输入
+    assert _dedup_events(pd.DatetimeIndex([]), idx, min_gap=60) == []

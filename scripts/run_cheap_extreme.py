@@ -100,6 +100,10 @@ def main() -> None:
         cand = bool(
             pd.notna(d["D1_pct"]) and d["D1_pct"] <= P_LO and d["D2_dd"] <= DD_LO
         )
+        # D4 期限结构数据可能比主连日线晚 1-2 日（slope 末日在 closes 末日之前）：
+        # 取最近可用的 D4（前向，避免快照显示全 None 的误导）
+        d4 = dims[sym]["D4_tslope_pct"].dropna()
+        d4v = d4.iloc[-1] if len(d4) else float("nan")
         snap_rows.append(
             {
                 "symbol": sym,
@@ -113,9 +117,7 @@ def main() -> None:
                 "D3_vol_pct": round(float(d["D3_volpct"]), 3)
                 if pd.notna(d["D3_volpct"])
                 else None,
-                "D4_tslope_pct": round(float(d["D4_tslope_pct"]), 3)
-                if pd.notna(d["D4_tslope_pct"])
-                else None,
+                "D4_tslope_pct": round(float(d4v), 3) if pd.notna(d4v) else None,
                 "candidate": cand,
             }
         )
