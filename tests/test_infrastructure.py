@@ -447,6 +447,25 @@ def test_build_slopes_basic() -> None:
     assert r1["F1"] == "RB01" and r1["F2"] == "RB05"
 
 
+def test_load_slope_panel_all_covers_universe(monkeypatch) -> None:
+    """全 universe 斜率面板：含 DCE 品种、缺文件跳过（不读真实数据）。"""
+    from quant_futures_01 import termstructure as ts
+
+    class _Cfg:
+        universe = [{"symbol": "RB0"}, {"symbol": "I0"}, {"symbol": "JD0"}]
+
+    def fake_load(symbol, variant="oi1"):
+        if symbol == "JD0":  # 模拟缺文件 → 跳过
+            raise FileNotFoundError(symbol)
+        idx = pd.to_datetime(["2020-01-02", "2020-01-03"])
+        return pd.DataFrame({"date": idx, "slope": [0.01, 0.02]})
+
+    monkeypatch.setattr(ts, "load_slope", fake_load)
+    panel = ts.load_slope_panel_all(_Cfg(), "oi1")
+    assert list(panel.columns) == ["RB0", "I0"]
+    assert len(panel) == 2
+
+
 def test_build_slopes_date_robust() -> None:
     """int/str/object（混入空表）三种日期输入都能正确解析。"""
     from quant_futures_01.termstructure import build_slopes

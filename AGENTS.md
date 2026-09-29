@@ -8,11 +8,15 @@
 ## 1. 这是什么项目
 
 期货量化研究项目（quant_futures_01）：**全品种商品期货**量化研究（回测探索，非实盘）。
-已批准并实施 5 个预注册方案（[docs/RESEARCH.md](docs/RESEARCH.md) 为研究索引）：
+已批准并实施 12 个预注册方案（[docs/RESEARCH.md](docs/RESEARCH.md) 为研究索引）。关键结论：
 - 基础设施（数据管道 + 成本模型 + 波动率目标回测引擎 + 基准）✅；
 - 动量家族 3 方案（TSMOM / vol-TSMOM / XSMOM）全部 ❌ 否决；
 - Carry 期限结构 🟡 部分通过后经诊断**降级**；
-- **动量长多腿诊断（docs/momentum_diag_plan.md）**：最后一个"长多腿为正"的发现也证伪——正贡献 **94~471% 来自贵金属+有色**，剔除后残余 ≈0。
+- **动量长多腿诊断（docs/momentum_diag_plan.md）**：最后一个"长多腿为正"的发现也证伪——正贡献 **94~471% 来自贵金属+有色**，剔除后残余 ≈0；
+- **贱极代理（docs/cheap_extreme_plan.md）✅ 唯一被量化确认的正向边际**：价格 5 年低分位+深跌后 6/12 个月净超额 +3.6%/+8.4%；
+- **政策维度（docs/stock_macro_plan.md）🟡**：M2 宽松期贱极超额 +7.3% vs 收紧期 +2.0%（采纳）；**库存维度 ❌ 结构性负发现**——价格贱极事件仓单分位中位 98.7%，"便宜≠库存低"，两条件几乎互斥；
+- **组合筛选器（docs/screener_plan.md）✅ 已采纳为日常工具**：贱极∧政策宽松 组合超额约为纯贱极 2.5 倍；机器筛→人工确认（成本/供给/现货）→决策，**只筛不决**；
+- **数据基座（docs/dce_data_plan.md）✅**：大商所期限结构经 sina 逐合约补全（31/31 品种覆盖，2018-05+）、JD0 鸡蛋纳入（universe 30→31）；DCE 仓单 WAF 封锁无免费替代（如实记录）。
 **研究结论（如实，2026-09-21，含样本外修正）**：**窗口结构比策略设计更决定结果**——2018-2026 是金属单边牛市（信号发现 = 金属 beta 幻觉、空头必亏）；**样本外复验（outsample_plan.md）证明该结论是窗口特定的**：2010-2017 危机 regime 中趋势信号跑赢深亏基准（+0.07 vs −0.25）、空头腿 +0.11 正贡献、动量赢家是农产品/黑色（非金属）。风控层：协方差波动率目标已采纳为新默认（2018-26 实现波动 15.3%），回撤减仓 overlay 证伪否决。回测默认窗口已扩至 2010-01-01。
 新方案仍须先预注册并经用户批准后实施。
 
@@ -40,7 +44,8 @@
 | scripts/run_outsample.py | 样本外扩展复验：W1(2010-17) vs W2(2018-26) 趋势/空头/板块/风控框架（见 docs/outsample_plan.md） |
 | scripts/run_cheap_extreme.py | 贱极扫描器（傅海棠框架）：价格低分位+深跌候选池 + 历史事件验证 + 阶段二政策/库存分组（见 docs/cheap_extreme_plan.md、docs/stock_macro_plan.md） |
 | scripts/fetch_macro.py | 宏观信贷管道：M2 月度（2008+）→ data/macro/m2_monthly.csv |
-| scripts/fetch_warehouse.py | SHFE 历史仓单管道：get_receipt 月批量 → data/warehouse/{VAR}.parquet（13 品种 2015+） |
+| scripts/fetch_warehouse.py | SHFE 历史仓单管道：get_receipt 月批量 → data/warehouse/{VAR}.parquet（13 品种 2015+；DCE 仓单 WAF 封锁不可得） |
+| scripts/fetch_dce_term.py | 大商所期限结构管道：sina 逐合约（2018-05+）→ data/term_structure/{SYM0}_oi1.parquet（11 品种，见 docs/dce_data_plan.md） |
 | scripts/run_screener.py | 组合筛选器：贱极∧政策宽松 候选池 + 历史分组验证（见 docs/screener_plan.md、docs/Screener_使用说明.md） |
 | scripts/example.py | 示例：配置框架用法（冒烟） |
 
@@ -50,7 +55,7 @@ config/default.yaml 中冻结参数（config.py `FROZEN_PARAMS` 标注；覆盖�
 
 | 参数 | 冻结值 | 说明 |
 |---|---|---|
-| universe | 30 品种 | 品种池（增删须预注册；由纪律保证，不触发 config 警告） |
+| universe | 31 品种 | 品种池（2026-09-28 由 30 增至 31：新增 JD0 鸡蛋，见 docs/dce_data_plan.md；增删须预注册） |
 | data.adjust_threshold | 0.20 | 后复权换月跳变阈值 |
 | cost.slippage_bps | 5 | 滑点 0.05% 单边 |
 | cost.commission_bps | 2 | 手续费 0.02% 单边（≈交易所标准×2 近似） |

@@ -31,7 +31,7 @@ from quant_futures_01.cheap_extreme import (
     vol_percentile,
     warehouse_low,
 )
-from quant_futures_01.termstructure import load_slope_panel
+from quant_futures_01.termstructure import load_slope_panel_all
 from backtest import load_adj_close_panel
 from fetch_warehouse import SHFE_VARS
 
@@ -75,7 +75,7 @@ def main() -> None:
     one_side = cost.one_side_pct
 
     closes = load_adj_close_panel(cfg)  # 2010-2026 全历史
-    slope_panel = load_slope_panel("oi1", cfg)
+    slope_panel = load_slope_panel_all(cfg, "oi1")
     sector_map = {u["symbol"]: u["sector"] for u in cfg.universe}
 
     # ---- 维度计算 ----

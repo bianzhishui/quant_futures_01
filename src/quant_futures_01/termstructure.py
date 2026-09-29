@@ -149,3 +149,20 @@ def load_slope_panel(variant: str = "oi1", cfg=None) -> pd.DataFrame:
         panel[u["symbol"]] = df.set_index("date")["slope"]
     out = pd.DataFrame(panel).sort_index()
     return out
+
+
+def load_slope_panel_all(cfg=None, variant: str = "oi1") -> pd.DataFrame:
+    """全 universe 斜率面板（date × symbol；含 DCE sina 补全，缺文件跳过）。
+
+    用途：贱极筛选器/扫描器的 D4 期限结构维度覆盖全部品种（docs/dce_data_plan.md）。
+    """
+    c = cfg or cfgmod.get_config()
+    panel = {}
+    for u in c.universe:
+        try:
+            df = load_slope(u["symbol"], variant)
+        except FileNotFoundError:
+            continue
+        panel[u["symbol"]] = df.set_index("date")["slope"]
+    out = pd.DataFrame(panel).sort_index()
+    return out

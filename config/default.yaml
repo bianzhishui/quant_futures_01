@@ -48,6 +48,7 @@ universe:
   - {symbol: "Y0", name: "豆油", sector: "农产品", exchange: "DCE"}
   - {symbol: "P0", name: "棕榈油", sector: "农产品", exchange: "DCE"}
   - {symbol: "C0", name: "玉米", sector: "农产品", exchange: "DCE"}
+  - {symbol: "JD0", name: "鸡蛋", sector: "农产品", exchange: "DCE"}  # 2026-09-21 纳入（docs/dce_data_plan.md）
   - {symbol: "OI0", name: "菜油", sector: "农产品", exchange: "CZCE"}
   - {symbol: "RM0", name: "菜粕", sector: "农产品", exchange: "CZCE"}
   - {symbol: "CF0", name: "棉花", sector: "农产品", exchange: "CZCE"}
