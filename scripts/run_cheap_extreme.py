@@ -32,7 +32,7 @@ from quant_futures_01.cheap_extreme import (
     warehouse_low,
 )
 from quant_futures_01.termstructure import load_slope_panel_all
-from backtest import load_adj_close_panel
+from backtest import load_adj_close_panel, load_raw_close_panel
 from fetch_warehouse import SHFE_VARS
 
 P_LO = 0.10  # 贱极分位门槛
@@ -74,17 +74,23 @@ def main() -> None:
     cost = CostModel(cfg)
     one_side = cost.one_side_pct
 
-    closes = load_adj_close_panel(cfg)  # 2010-2026 全历史
+    closes = load_adj_close_panel(cfg)  # 收益/基准（后复权，剔除换月跳变）
+    levels = load_raw_close_panel(
+        cfg
+    ).reindex(  # 水平类指标（真实价格，docs/level_basis_plan.md）
+        index=closes.index, columns=closes.columns
+    )
     slope_panel = load_slope_panel_all(cfg, "oi1")
     sector_map = {u["symbol"]: u["sector"] for u in cfg.universe}
 
-    # ---- 维度计算 ----
+    # ---- 维度计算（D1/D2 真实价；D3 复权收益；D4 斜率）----
     dims: dict[str, pd.DataFrame] = {}
     for sym in closes.columns:
         c = closes[sym]
+        lv = levels[sym]
         rets = c.pct_change()
-        d1 = price_percentile(c)
-        d2 = drawdown_from_high(c)
+        d1 = price_percentile(lv)
+        d2 = drawdown_from_high(lv)
         d3 = vol_percentile(rets)
         d4 = (
             term_slope_percentile(slope_panel[sym])

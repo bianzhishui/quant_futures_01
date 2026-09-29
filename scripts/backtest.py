@@ -63,6 +63,26 @@ def load_adj_close_panel(cfg) -> pd.DataFrame:
     return panel
 
 
+def load_raw_close_panel(cfg) -> pd.DataFrame:
+    """加载品种池原始 close 面板（真实价格水平）。
+
+    用途：价格分位/回撤等**水平类**指标（docs/level_basis_plan.md）——后复权因子
+    在长窗口内衰减会系统性压低分位，故水平类指标须用真实价格；收益类仍用 adj_close。
+    """
+    closes = {}
+    for u in cfg.universe:
+        try:
+            df = load_daily(u["symbol"])
+        except FileNotFoundError:
+            continue
+        closes[u["symbol"]] = df.set_index("date")["close"]
+    panel = pd.DataFrame(closes).sort_index()
+    panel = panel[panel.index >= pd.Timestamp(cfg.backtest.start_date)]
+    panel = panel.dropna(how="all")
+    panel = panel.loc[:, panel.notna().sum() >= cfg.limits.min_n]
+    return panel
+
+
 def generate_weights(
     mode: str,
     closes: pd.DataFrame,

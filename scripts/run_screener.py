@@ -39,7 +39,7 @@ from quant_futures_01.cheap_extreme import (
     warehouse_low,
 )
 from quant_futures_01.termstructure import load_slope_panel_all
-from backtest import load_adj_close_panel
+from backtest import load_adj_close_panel, load_raw_close_panel
 from fetch_warehouse import SHFE_VARS
 
 P_LO = 0.10  # 贱极分位门槛
@@ -68,7 +68,12 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     one_side = CostModel(cfg).one_side_pct
 
-    closes = load_adj_close_panel(cfg)
+    closes = load_adj_close_panel(cfg)  # 收益/基准（后复权）
+    levels = load_raw_close_panel(
+        cfg
+    ).reindex(  # 水平类指标（真实价，docs/level_basis_plan.md）
+        index=closes.index, columns=closes.columns
+    )
     slope_panel = load_slope_panel_all(cfg, "oi1")
     sector_map = {u["symbol"]: u["sector"] for u in cfg.universe}
 
@@ -96,8 +101,9 @@ def main() -> None:
     dims: dict[str, pd.DataFrame] = {}
     for sym in closes.columns:
         c = closes[sym]
-        d1 = price_percentile(c)
-        d2 = drawdown_from_high(c)
+        lv = levels[sym]
+        d1 = price_percentile(lv)
+        d2 = drawdown_from_high(lv)
         d3 = vol_percentile(c.pct_change())
         d4 = (
             term_slope_percentile(slope_panel[sym])
@@ -212,6 +218,33 @@ def main() -> None:
         )
     snap_df = pd.DataFrame(snap_rows)
     snap_df.to_csv(out / "screener_candidates.csv", index=False)
+
+    # 口径对照（真实价 vs 后复权）：水平类指标差异（docs/level_basis_plan.md）
+    chk = []
+    for sym in closes.columns:
+        d1r, d2r = price_percentile(levels[sym]), drawdown_from_high(levels[sym])
+        d1a, d2a = price_percentile(closes[sym]), drawdown_from_high(closes[sym])
+        chk.append(
+            {
+                "symbol": sym,
+                "D1_raw": round(float(d1r.iloc[-1]), 3)
+                if pd.notna(d1r.iloc[-1])
+                else None,
+                "D1_adj": round(float(d1a.iloc[-1]), 3)
+                if pd.notna(d1a.iloc[-1])
+                else None,
+                "D1_delta": round(float(d1r.iloc[-1] - d1a.iloc[-1]), 3)
+                if pd.notna(d1r.iloc[-1]) and pd.notna(d1a.iloc[-1])
+                else None,
+                "D2_raw": round(float(d2r.iloc[-1]), 3)
+                if pd.notna(d2r.iloc[-1])
+                else None,
+                "D2_adj": round(float(d2a.iloc[-1]), 3)
+                if pd.notna(d2a.iloc[-1])
+                else None,
+            }
+        )
+    pd.DataFrame(chk).to_csv(out / "level_basis_check.csv", index=False)
     print(f"\n=== 当前市场扫描（{last.date()}）===")
     print(snap_df.to_string(index=False))
     combos = snap_df[snap_df["combo_candidate"]]
