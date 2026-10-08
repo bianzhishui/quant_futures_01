@@ -38,6 +38,50 @@ SHFE_VARS = [
 ]
 
 
+def _shfe_receipt_day_robust(date_str: str, vars_list: list[str]) -> pd.DataFrame:
+    """SHFE 单日仓单健壮解析（回退路径）。
+
+    akshare `get_shfe_receipt_3` 在 2026-06 起有两个 bug：
+      1) `int('2961000.0000')` 数值为浮点串 → 崩溃（本函数用 int(float())）；
+      2) `chinese_to_english('20号胶(仓库)')` 映射表缺新增品类 → 崩溃（本函数跳过未知品类）。
+    """
+    from io import StringIO
+
+    import requests
+    from akshare.futures import cons
+
+    try:
+        from akshare.futures.cons import chinese_to_english
+    except ImportError:  # 兼容旧版
+        from akshare.futures.receipt import chinese_to_english
+
+    url = (
+        "https://www.shfe.com.cn/data/tradedata/future/stockdata/"
+        f"dailystock_{date_str}/ZH/all.html"
+    )
+    r = requests.get(url, headers=cons.shfe_headers, timeout=30)
+    tabs = pd.read_html(StringIO(r.text))
+    recs = []
+    for t in tabs[1:]:
+        try:
+            name = chinese_to_english(str(t.iloc[0, 1]))
+        except Exception:  # noqa: BLE001 —— 未知/新增品类（不在品种池）跳过
+            continue
+        recs.append(
+            {
+                "var": name,
+                "receipt": int(float(t.iloc[-1, 2])),
+                "receipt_chg": int(float(t.iloc[-1, 3])),
+            }
+        )
+    df = pd.DataFrame(recs)
+    if df.empty:
+        return df
+    df = df.groupby("var", as_index=False)[["receipt", "receipt_chg"]].sum()
+    df["date"] = pd.to_datetime(date_str)
+    return df[df["var"].isin(vars_list)]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     cfgmod.add_config_arg(parser)
@@ -65,9 +109,21 @@ def main() -> None:
                 f"[{i}/{len(months)}] {m}: {len(df) if df is not None else 0} 行",
                 flush=True,
             )
-        except Exception as e:  # noqa: BLE001 —— 单月失败记录并继续
+        except Exception as e:  # noqa: BLE001 —— akshare 失败 → 逐日健壮回退
+            rows2 = []
+            for d in pd.bdate_range(start=m.start_time, end=m.end_time):
+                try:
+                    dd = _shfe_receipt_day_robust(d.strftime("%Y%m%d"), SHFE_VARS)
+                    if len(dd):
+                        rows2.append(dd)
+                except Exception:  # noqa: BLE001 —— 非交易日/取数失败跳过
+                    continue
+                time.sleep(args.pause)
+            if rows2:
+                all_rows.append(pd.concat(rows2, ignore_index=True))
             print(
-                f"[{i}/{len(months)}] {m}: ❌ {type(e).__name__} {str(e)[:80]}",
+                f"[{i}/{len(months)}] {m}: akshare ❌ {type(e).__name__} → "
+                f"回退 {len(rows2)} 日 {'✅' if rows2 else '❌'}",
                 flush=True,
             )
         time.sleep(args.pause)
@@ -76,11 +132,20 @@ def main() -> None:
         raise RuntimeError("仓单拉取全部失败")
     raw = pd.concat(all_rows, ignore_index=True).sort_values(["var", "date"])
     for var, g in raw.groupby("var"):
-        g[["date", "receipt", "receipt_chg"]].to_parquet(
-            out_dir / f"{var}.parquet", index=False
-        )
+        p = out_dir / f"{var}.parquet"
+        new = g[["date", "receipt", "receipt_chg"]].copy()
+        new["date"] = pd.to_datetime(new["date"])
+        if p.exists():  # 增量合并（--start 指定新月份时不覆盖历史）
+            old = pd.read_parquet(p)
+            old["date"] = pd.to_datetime(old["date"])
+            new = (
+                pd.concat([old, new], ignore_index=True)
+                .drop_duplicates(subset="date", keep="last")
+                .sort_values("date")
+            )
+        new.to_parquet(p, index=False)
         print(
-            f"  {var}: {len(g)} 行 {g['date'].min().date()} ~ {g['date'].max().date()}"
+            f"  {var}: {len(new)} 行 {new['date'].min().date()} ~ {new['date'].max().date()}"
         )
     print(f"\n✅ 完成：{len(all_rows)} 个月 → data/warehouse/")
 

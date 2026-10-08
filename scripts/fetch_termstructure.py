@@ -28,6 +28,7 @@ from quant_futures_01.termstructure import (
     build_slopes,
     carry_symbols,
     fetch_exchange_year,
+    load_slope,
     save_slope,
 )
 
@@ -86,6 +87,18 @@ def main() -> None:
         daily = pd.concat(parts, ignore_index=True)
         for v in VARIANTS:
             slope_df = build_slopes(daily, v)
+            # 增量合并：--years 指定子集时不覆盖既有历史（只补/更新区间内的日期）
+            try:
+                old = load_slope(u["symbol"], v)
+                old["date"] = pd.to_datetime(old["date"])
+                slope_df = (
+                    pd.concat([old, slope_df], ignore_index=True)
+                    .drop_duplicates(subset="date", keep="last")
+                    .sort_values("date")
+                    .reset_index(drop=True)
+                )
+            except FileNotFoundError:
+                pass
             save_slope(u["symbol"], slope_df, v)
             if v == "oi1":
                 summary.append(
